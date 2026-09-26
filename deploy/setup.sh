@@ -17,7 +17,10 @@ EMAIL="${2:?usage: setup.sh <domain> <email>}"
 
 echo "==> Packages"
 apt-get update -qq
-apt-get install -y -qq ufw certbot docker.io docker-compose-plugin
+# Ubuntu 24.04 ships the Compose CLI plugin as docker-compose-v2. The
+# docker-compose-plugin name belongs to Docker's separate apt repository and
+# is unavailable on a stock EC2/DigitalOcean Ubuntu image.
+apt-get install -y -qq ufw certbot docker.io docker-compose-v2
 
 echo "==> Firewall"
 # Default-deny inbound. 80 stays open because certbot's HTTP-01 challenge
