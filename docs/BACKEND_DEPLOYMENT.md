@@ -12,6 +12,7 @@ keys, database URLs, Supabase keys, challenge secrets, or evidence tokens.
 |---|---|
 | Frontend | Cloudflare Pages project `hakaishield-dashboard` |
 | Frontend hosts | `https://interviewyaar.lol` and `https://www.interviewyaar.lol` |
+| Protected staging host | `https://shield.interviewyaar.lol` (DNS-only A record) |
 | AWS region | Mumbai, `ap-south-1` |
 | EC2 instance | `i-04a0ded0c9d9c7434` (`hakaishield-backend`) |
 | AMI | Ubuntu Server 24.04 LTS, x86_64, `ami-006f82a1d5a27da54` |
@@ -26,7 +27,9 @@ keys, database URLs, Supabase keys, challenge secrets, or evidence tokens.
 | PostgreSQL/Auth | Supabase; credentials stay only in the server environment |
 | Server bootstrap | Docker 29.1.3, Compose 2.40.3, Certbot 2.9.0, UFW active |
 | Swap | 2 GiB `/swapfile`, persistent through `/etc/fstab` |
-| Pilot image | `hakaishield:pilot`, image `2fd93bf41e8f`, 12.7 MB, non-root |
+| Deployed source | `4491c38b779fdb6dc0506f62c2633dd6955a025d` |
+| Pilot image | `hakaishield:4491c38b`, image `3657065e30c2`, non-root |
+| TLS | Let's Encrypt certificate; expires 2026-12-25; renewal dry-run passed |
 
 The private SSH key is operator-held and must not be copied into this repository.
 The restricted working copy is `%USERPROFILE%\.ssh\hakaishield-backend.pem`;
@@ -44,15 +47,12 @@ The EC2 security group must allow:
 If the operator's ISP address changes, update the SSH source rule to the new
 `/32` before attempting to connect. Do not broaden SSH to `0.0.0.0/0`.
 
-## Required values still pending
+## Remaining launch decisions
 
 - A stable-IP decision before client DNS cutover.
-- The real protected client hostname, for example `protect.client.example`.
-- The client's origin URL, ideally in or near Mumbai.
-- A working operator email for Let's Encrypt expiry notices.
-- The approved Supabase PostgreSQL connection URL and project URL.
-- Stable generated challenge/evidence secrets.
 - The verified pilot tenant/owner binding.
+- The real client's protected hostname and origin after staging approval.
+- Capacity sizing after bounded shadow-traffic measurements.
 
 ## Verified on the EC2 host
 
@@ -70,8 +70,26 @@ attempt correctly failed when the TLS key was `0600 ubuntu:ubuntu`; the retry
 used the production `root:65532` / `0640` key permission and passed. Temporary
 containers, processes, certificates, and files were removed after the test.
 
-The backend is not public yet. Real DNS, Let's Encrypt, Compose Redis,
-PostgreSQL/Auth configuration, and client-path testing remain pending.
+The public staging path is now live. `shield.interviewyaar.lol` resolves directly
+to the EC2 address, has a valid Let's Encrypt certificate, and returned HTTP
+200 from `/__hakaishield/healthz` on 2026-09-26. Compose reported the backend
+running with zero restarts and Redis healthy; Redis returned `PONG`. Startup
+logs confirmed PostgreSQL connectivity, the authenticated domains/rules/settings
+API, origin `https://interviewyaar.lol`, and shadow mode with no blocking or
+challenges.
+
+Two startup defects were found during the real deployment and fixed with tests:
+
+- `65950aa6`: look up the default owner by protected host instead of treating
+  the string `default` as a tenant UUID.
+- `4491c38b`: cast Supabase's UUID `owner_user_id` to text before applying the
+  empty owner fallback.
+
+Full Go tests, vet, build, `golangci-lint`, and focused mutation checks passed
+for these changes. The deployment was intentionally paused after the first
+successful public health check at the operator's request. Restart recovery,
+the proxied homepage, TLS inspection, bounded load testing, tenant ownership,
+and release-branch integration have not yet been signed off.
 
 `interviewyaar.lol` is the HakaiShield frontend. Do not point it at EC2. The
 protected client hostname needs a DNS-only A record to the EC2 public IPv4 so
@@ -108,6 +126,24 @@ GitHub, the server, a ticket, or chat.
    recovery, reboot recovery, and certificate renewal.
 10. Run normal-browser, headless-browser, velocity, replay, malformed-request,
     challenge, false-positive, and bounded load tests before any enforcement.
+
+## Next session checklist
+
+1. Recheck Compose state, restart count, sanitized logs, the public health
+   endpoint, and the proxied `/` response before changing anything.
+2. Inspect the public certificate subject, SAN, issuer, and expiry.
+3. Restart the backend through Compose and confirm health and Redis recovery.
+4. Run a small controlled HTTPS load test suitable for a `t2.micro`; record
+   latency percentiles and errors instead of making an unmeasured capacity claim.
+5. Verify or create the Supabase tenant/owner binding for
+   `shield.interviewyaar.lol`, then test authenticated dashboard APIs.
+6. Keep detection and any learned model in shadow mode until labelled real
+   traffic measures recall, human false-positive rate, and challenge burden.
+7. Integrate commits `65950aa6` and `4491c38b` from `codex/aws-deploy-fix` into
+   `release/client-pilot-hardening` without staging unrelated dirty HTTP/2 or
+   worktree changes; rerun the required checks and push the release branch.
+8. Allocate a stable address or another stable ingress before giving DNS to a
+   paying client because the current auto-assigned IPv4 changes on stop/start.
 
 ## Capacity note
 
