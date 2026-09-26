@@ -101,6 +101,19 @@ func matchingDefaultOwner(rowHost, rowTarget, rowStatus, owner, host, target str
 	return owner, nil
 }
 
+// lookupDefaultOwner finds the managed pilot row by its configured hostname.
+// Database tenant IDs may be UUIDs, so a synthetic "default" ID is invalid.
+func lookupDefaultOwner(ctx context.Context, host, target string, loader tenant.TenantLoader) (string, error) {
+	_, rowTarget, _, _, rowStatus, owner, err := loader(ctx, host)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return matchingDefaultOwner(host, rowTarget, rowStatus, owner, host, target)
+}
+
 func main() {
 	loadDotEnv(".env")
 
@@ -245,15 +258,10 @@ func main() {
 	defaultOwner := ""
 	if *dbURL != "" && *host != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		rowHost, rowTarget, _, _, rowStatus, owner, lookupErr := db.GetTenantByID(ctx, "default")
+		defaultOwner, err = lookupDefaultOwner(ctx, *host, *target, db.GetTenant)
 		cancel()
-		if lookupErr == nil {
-			defaultOwner, err = matchingDefaultOwner(rowHost, rowTarget, rowStatus, owner, *host, *target)
-			if err != nil {
-				log.Fatalf("hakaishield: %v", err)
-			}
-		} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
-			log.Fatalf("hakaishield: reading default tenant owner: %v", lookupErr)
+		if err != nil {
+			log.Fatalf("hakaishield: reading default tenant owner: %v", err)
 		}
 	}
 	err = store.Add("default", tenant.TenantConfig{
