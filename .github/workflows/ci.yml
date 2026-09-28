@@ -81,4 +81,9 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.5.0
+          # Release binaries are built with an older Go than go.mod's
+          # toolchain and refuse to load ("Go language version used to
+          # build golangci-lint is lower than the targeted Go version").
+          # goinstall builds it with the toolchain setup-go installed.
+          install-mode: goinstall
           working-directory: backend
