@@ -328,3 +328,17 @@ Gotcha: during a random-host flood a brand-new domain's first request can get
 (STATUS, ARCHITECTURE, DEPLOYMENT, DECISIONS, PROGRESS); references updated.
 Gotcha: CLAUDE.md now says docs/ holds exactly five files — extend one,
 never add a sixth.
+
+### 2026-09-28 — pilot deploy branch: main + release + HTTP/2
+
+`c7c3cb7a` — Merged the 22 release commits (UUID owners, split-host
+`-origin-host-from-target`, AWS staging, Pages frontend, crawler-claim fix)
+onto main; release-only docs folded into the five files, runbook moved to
+`deploy/RUNBOOK.md`, frontend handoff to `dashboard/FRONTEND.md`.
+`2dfdb2d5` — HTTP/2 greeting fingerprint, weight 0, forwarded as
+`X-HakaiShield-HTTP2`; fixed Shutdown hanging on open h2 conns, preconnects
+being dropped, silent partial `.env` loads; circl v1.6.3.
+Gotcha: adding `h2_tool_match` changed `FeatureVersion`, so any model or
+samples from an older build are refused by design — retrain, don't patch.
+Gotcha: local Go 1.26.5 has 7 stdlib vulns fixed in 1.26.6; build the
+image with `--pull`.

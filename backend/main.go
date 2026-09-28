@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -74,6 +75,12 @@ func loadDotEnv(path string) {
 			_ = os.Setenv(key, value)
 		}
 	}
+	// A read error (such as a line over the 64 KiB scanner limit) stops
+	// the loop early. Starting with half the secrets loaded is worse than
+	// not starting.
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("hakaishield: reading %s: %v", path, err)
+	}
 }
 
 // redactCredentials removes URL userinfo passwords before logging database
@@ -101,11 +108,25 @@ func matchingDefaultOwner(rowHost, rowTarget, rowStatus, owner, host, target str
 	return owner, nil
 }
 
+// lookupDefaultOwner finds the managed pilot row by its configured hostname.
+// Database tenant IDs may be UUIDs, so a synthetic "default" ID is invalid.
+func lookupDefaultOwner(ctx context.Context, host, target string, loader tenant.TenantLoader) (string, error) {
+	_, rowTarget, _, _, rowStatus, owner, err := loader(ctx, host)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return matchingDefaultOwner(host, rowTarget, rowStatus, owner, host, target)
+}
+
 func main() {
 	loadDotEnv(".env")
 
 	addr := flag.String("addr", ":8080", "address to listen on")
 	target := flag.String("target", "", "origin server to protect, e.g. https://example.com")
+	originHostFromTarget := flag.Bool("origin-host-from-target", false, "send the target URL host to the origin when its virtual host differs from the protected hostname")
 	host := flag.String("host", "", "public hostname for the default tenant; empty permits any Host for local development")
 	certFile := flag.String("tls-cert", "", "TLS certificate file; enables TLS + JA4 fingerprinting")
 	keyFile := flag.String("tls-key", "", "TLS private key file, required with -tls-cert")
@@ -193,6 +214,8 @@ func main() {
 
 	// Start dynamic JA4 synchronization from Redis
 	signals.StartJA4Sync(context.Background(), rdb)
+	// And the HTTP/2 tool fingerprint feed, same pattern.
+	signals.StartHTTP2ToolSync(context.Background(), rdb)
 
 	if *dbURL != "" {
 		if err := db.Init(*dbURL); err != nil {
@@ -231,7 +254,12 @@ func main() {
 	// origins to be public and rechecked on dial to close the SSRF path.
 	store.ProxyFactory = core.NewPublicOriginProxy
 
-	originProxy, err := core.NewOriginProxy(*target)
+	var originProxy *httputil.ReverseProxy
+	if *originHostFromTarget {
+		originProxy, err = core.NewOriginProxyWithTargetHost(*target)
+	} else {
+		originProxy, err = core.NewOriginProxy(*target)
+	}
 	if err != nil {
 		log.Fatalf("hakaishield: creating origin proxy: %v", err)
 	}
@@ -245,15 +273,10 @@ func main() {
 	defaultOwner := ""
 	if *dbURL != "" && *host != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		rowHost, rowTarget, _, _, rowStatus, owner, lookupErr := db.GetTenantByID(ctx, "default")
+		defaultOwner, err = lookupDefaultOwner(ctx, *host, *target, db.GetTenant)
 		cancel()
-		if lookupErr == nil {
-			defaultOwner, err = matchingDefaultOwner(rowHost, rowTarget, rowStatus, owner, *host, *target)
-			if err != nil {
-				log.Fatalf("hakaishield: %v", err)
-			}
-		} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
-			log.Fatalf("hakaishield: reading default tenant owner: %v", lookupErr)
+		if err != nil {
+			log.Fatalf("hakaishield: reading default tenant owner: %v", err)
 		}
 	}
 	err = store.Add("default", tenant.TenantConfig{
@@ -386,6 +409,12 @@ func main() {
 		ConnContext:       core.ConnContext,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
+	}
+	// Serve negotiated h2 connections with the maintained x/net/http2
+	// server after their greeting has been fingerprinted. HTTP/1.1
+	// serving is untouched.
+	if err := core.WireHTTP2(srv); err != nil {
+		log.Fatalf("hakaishield: configuring HTTP/2: %v", err)
 	}
 
 	ln, err := net.Listen("tcp", *addr)

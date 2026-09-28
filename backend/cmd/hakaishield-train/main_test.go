@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,6 +117,28 @@ func TestRunRefusesAutomaticallyCollectedLabelsByDefault(t *testing.T) {
 	}
 }
 
+func TestRunRefusesApprovalOfUnverifiedOrUnevaluatedLabels(t *testing.T) {
+	in := labelledTraffic(t, 100, 100)
+	for _, tc := range []runOptions{
+		{in: in, out: filepath.Join(t.TempDir(), "unverified.json"), holdout: 0.2, allowUnverifiedLabels: true, approvedBy: "owner", challengeAt: 0.5, blockAt: 0.9},
+		{in: in, out: filepath.Join(t.TempDir(), "no-holdout.json"), holdout: 0, approvedBy: "owner", challengeAt: 0.5, blockAt: 0.9},
+	} {
+		if err := run(tc); err == nil {
+			t.Fatalf("run(%+v) stamped an approved model without verified holdout evidence", tc)
+		}
+	}
+}
+
+func TestRunRefusesApprovalOfOneClassHoldout(t *testing.T) {
+	// Input ordered by label puts only bots in the final holdout. A good
+	// training score cannot measure human harm on that slice.
+	in := labelledTraffic(t, 150, 150)
+	err := run(runOptions{in: in, out: filepath.Join(t.TempDir(), "model.json"), holdout: 0.2, approvedBy: "owner", challengeAt: 0.5, blockAt: 0.9})
+	if err == nil {
+		t.Fatal("approved model accepted a holdout with no humans")
+	}
+}
+
 // One-class data reaches the trainer as a perfectly accurate, perfectly
 // useless model. It has to stop here, not in production.
 func TestRunRefusesOneClassTraffic(t *testing.T) {
@@ -127,7 +150,7 @@ func TestRunRefusesOneClassTraffic(t *testing.T) {
 
 func TestRunRefusesAnImpossibleHoldout(t *testing.T) {
 	in := labelledTraffic(t, 100, 100)
-	for _, holdout := range []float64{-0.1, 1, 1.5} {
+	for _, holdout := range []float64{-0.1, 1, 1.5, math.NaN(), math.Inf(1)} {
 		if err := run(runOptions{in: in, out: filepath.Join(t.TempDir(), "model.json"), holdout: holdout, challengeAt: 0.5, blockAt: 0.9}); err == nil {
 			t.Errorf("run(holdout=%v) returned no error", holdout)
 		}

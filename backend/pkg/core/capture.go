@@ -17,9 +17,11 @@ type ctxKeyConn struct{}
 // fingerprint can only be built from them.
 func NewCaptureListener(inner net.Listener, tlsConfig *tls.Config) net.Listener {
 	cfg := tlsConfig.Clone()
-	// HTTP/2 fingerprinting isn't built yet, so don't offer h2 — see
-	// docs/DECISIONS.md.
-	cfg.NextProtos = []string{"http/1.1"}
+	// h2 is offered so HTTP/2 clients are served and their greeting
+	// fingerprinted (WireHTTP2 installs the handler). HTTP/1.1 stays
+	// listed so plain browsers and non-h2 tools keep working. See
+	// docs/DECISIONS.md for why h2 was deferred and what changed.
+	cfg.NextProtos = []string{"h2", "http/1.1"}
 	return &captureListener{Listener: inner, config: cfg}
 }
 

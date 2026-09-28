@@ -59,39 +59,68 @@ func TestSplitTimeBasedLeavesHoldoutStrictlyLater(t *testing.T) {
 	}
 }
 
-// Group leakage: the same identity appearing on both sides means the
-// model is graded on clients it saw. The split must keep whole
-// identities on one side — moved, not silently dropped.
+func TestSplitKeepsLateRepeatIdentityOutOfEarlierHoldout(t *testing.T) {
+	samples := []EvalSample{
+		{Identity: "repeat", At: 1},
+		{Identity: "other", At: 2},
+		{Identity: "fresh", At: 3},
+		{Identity: "repeat", At: 4},
+		{Identity: "later", At: 5},
+	}
+	train, holdout := SplitLeakageSafe(samples, 0.6)
+	if len(train)+len(holdout) != len(samples) || len(holdout) == 0 {
+		t.Fatalf("split must retain all samples and a usable holdout: train=%d holdout=%d", len(train), len(holdout))
+	}
+	for _, tr := range train {
+		for _, h := range holdout {
+			if tr.At >= h.At {
+				t.Fatalf("training time %d is not before holdout time %d", tr.At, h.At)
+			}
+			if tr.Identity != "" && tr.Identity == h.Identity {
+				t.Fatalf("identity %q occurs on both sides", tr.Identity)
+			}
+		}
+	}
+}
+
+// A repeated identity must advance the time cut without losing samples.
 func TestSplitKeepsIdentitiesWhole(t *testing.T) {
-	samples := evalSamples()
-	// Two independent identities, three samples each: a 1/3 holdout
-	// takes the newest g2 slice, and the g2 straddler at 100 must be
-	// pulled back into training without emptying the holdout.
-	samples = append(samples,
-		EvalSample{Sample: Sample{Fired: 0, Automated: false}, Identity: "g3", At: 160},
-		EvalSample{Sample: Sample{Fired: 0, Automated: false}, Identity: "g3", At: 170},
-		EvalSample{Sample: Sample{Fired: 0, Automated: false}, Identity: "g3", At: 180},
-	)
-	train, holdout := SplitLeakageSafe(samples, 0.3)
+	samples := []EvalSample{
+		{Identity: "g1", At: 1}, {Identity: "g1", At: 2},
+		{Identity: "g2", At: 3}, {Identity: "g1", At: 4},
+		{Identity: "g3", At: 5}, {Identity: "g3", At: 6},
+	}
+	train, holdout := SplitLeakageSafe(samples, 0.5)
+	if len(holdout) != 2 {
+		t.Fatalf("holdout = %d samples, want the two later g3 samples", len(holdout))
+	}
 	for _, h := range holdout {
 		for _, tr := range train {
 			if h.Identity == tr.Identity && h.Identity != "" {
 				t.Fatalf("identity %q appears on both sides of the split", h.Identity)
 			}
+			if h.At <= tr.At {
+				t.Fatalf("holdout time %d is not later than training time %d", h.At, tr.At)
+			}
+		}
+		if h.Identity != "g3" {
+			t.Errorf("unexpected holdout identity %q", h.Identity)
 		}
 	}
-	// The straddler was moved into training, not discarded: evaluation
-	// must not quietly shrink the dataset it is judged on.
 	if len(train)+len(holdout) != len(samples) {
 		t.Fatalf("split lost samples: %d train + %d holdout != %d", len(train), len(holdout), len(samples))
 	}
-	// g2's last sample must survive the pull-back of its straddler:
-	// the holdout keeps whole identities, not samples from abandoned
-	// ones.
-	for _, h := range holdout {
-		if h.Identity != "g2" {
-			t.Errorf("unexpected holdout identity %q", h.Identity)
-		}
+}
+
+func TestSplitResultsDoNotShareBackingArray(t *testing.T) {
+	samples := []EvalSample{{At: 1}, {At: 2}, {At: 3}, {At: 4}}
+	train, holdout := SplitLeakageSafe(samples, 0.5)
+	train = append(train, EvalSample{At: 99})
+	if len(train) != 3 {
+		t.Fatalf("grown training set = %d samples, want 3", len(train))
+	}
+	if holdout[0].At != 3 {
+		t.Fatalf("appending training data changed the holdout to time %d", holdout[0].At)
 	}
 }
 
@@ -221,5 +250,22 @@ func TestPromotionRefusesATinyHoldout(t *testing.T) {
 	})
 	if rep.Decision != hold {
 		t.Errorf("decision = %q, want hold on a tiny holdout", rep.Decision)
+	}
+}
+
+func TestPromotionRefusesHoldoutWithoutHumans(t *testing.T) {
+	samples := make([]EvalSample, 250)
+	for i := range samples {
+		samples[i] = EvalSample{Sample: Sample{Fired: 1, Automated: true}, At: int64(i)}
+	}
+	rep := RunPromotion(evalModel(), samples)
+	if rep.Decision != hold {
+		t.Fatalf("decision = %q with %d holdout humans, want hold", rep.Decision, rep.Model.Holdout.Humans)
+	}
+}
+
+func TestCalibrationBucketsRefusesUnsupportedCount(t *testing.T) {
+	if got := CalibrationBuckets(evalModel(), []EvalSample{{Sample: Sample{Fired: 1}, At: 1}}, 65); got != nil {
+		t.Fatalf("65 buckets = %d entries, want nil instead of indexing past the 64-bucket cap", len(got))
 	}
 }

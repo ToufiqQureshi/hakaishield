@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -72,6 +73,95 @@ func TestNewOriginProxyUsesResolvedClientIP(t *testing.T) {
 	proxy.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got %d", w.Code)
+	}
+}
+
+func TestNewOriginProxyWithTargetHost(t *testing.T) {
+	var receivedHost string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHost = r.Host
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer origin.Close()
+
+	proxy, err := NewOriginProxyWithTargetHost(origin.URL)
+	if err != nil {
+		t.Fatalf("NewOriginProxyWithTargetHost: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "shield.customer.example"
+
+	w := httptest.NewRecorder()
+	proxy.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	wantHost := origin.Listener.Addr().String()
+	if receivedHost != wantHost {
+		t.Fatalf("origin Host = %q, want target host %q", receivedHost, wantHost)
+	}
+}
+
+func TestNewOriginProxyPreservesVisitorHostByDefault(t *testing.T) {
+	var receivedHost string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHost = r.Host
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer origin.Close()
+
+	proxy, err := NewOriginProxy(origin.URL)
+	if err != nil {
+		t.Fatalf("NewOriginProxy: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "customer.example"
+
+	w := httptest.NewRecorder()
+	proxy.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	if receivedHost != "customer.example" {
+		t.Fatalf("origin Host = %q, want visitor host", receivedHost)
+	}
+}
+
+// TestNewOriginProxyFingerprintHeadersAreOurs checks the origin only ever
+// sees fingerprint headers set by us. An origin that trusts
+// X-HakaiShield-JA4/-HTTP2 would otherwise accept a visitor's forgery.
+func TestNewOriginProxyFingerprintHeadersAreOurs(t *testing.T) {
+	var gotJA4, gotH2 []string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotJA4, gotH2 = r.Header.Values(ja4Header), r.Header.Values(h2Header)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer origin.Close()
+	proxy, err := NewOriginProxy(origin.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	forged := func() *http.Request {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set(ja4Header, "t13d1516h2_forged_forged")
+		req.Header.Set(h2Header, "1:65536|0||forged")
+		return req
+	}
+
+	// No captured fingerprints (plain HTTP/1.1): forged values vanish.
+	proxy.ServeHTTP(httptest.NewRecorder(), forged())
+	if len(gotJA4) != 0 || len(gotH2) != 0 {
+		t.Fatalf("forged headers reached origin: ja4=%q h2=%q", gotJA4, gotH2)
+	}
+
+	// Captured fingerprints replace the forged ones, exactly once.
+	const ja4, h2 = "t13d1516h2_8daaf6152771_e5627efa2ab1", "2:0;4:4194304|1073741824||amps"
+	req := forged()
+	ctx := context.WithValue(WithJA4(req.Context(), ja4), ctxKeyHTTP2{}, h2)
+	proxy.ServeHTTP(httptest.NewRecorder(), req.WithContext(ctx))
+	if len(gotJA4) != 1 || gotJA4[0] != ja4 || len(gotH2) != 1 || gotH2[0] != h2 {
+		t.Fatalf("origin got ja4=%q h2=%q, want exactly [%q] [%q]", gotJA4, gotH2, ja4, h2)
 	}
 }
 

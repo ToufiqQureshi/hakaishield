@@ -55,14 +55,23 @@ var scriptingMarkers = []string{
 // claimsBrowser reports whether ua claims to be a real browser,
 // rather than a script or a bot that's already honest about itself.
 func claimsBrowser(ua string) bool {
-	lower := strings.ToLower(ua)
-	for _, m := range crawlerMarkers {
-		if strings.Contains(lower, m) {
-			return false
-		}
+	if claimsCrawler(ua) {
+		return false
 	}
 	for _, m := range browserMarkers {
 		if strings.Contains(ua, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// claimsCrawler detects a crawler declaration without trusting it as proof
+// that the request comes from an approved search engine.
+func claimsCrawler(ua string) bool {
+	lower := strings.ToLower(ua)
+	for _, marker := range crawlerMarkers {
+		if strings.Contains(lower, marker) {
 			return true
 		}
 	}

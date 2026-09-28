@@ -62,7 +62,12 @@ New entry format: `- **Choice** — why. Rejected: … (date)`
 - **`ReverseProxy.Rewrite`, not `Director`** — Rewrite strips visitor
   `X-Forwarded-*`. Also strip every other client-IP header. (09-14)
 - **Import only fingerproxy `pkg/ja4`** — avoids Prometheus/gopacket. (09-14)
-- **HTTP/1.1 only** until h2 fingerprinting exists. (09-14)
+- **h2 offered and fingerprinted, weight 0.** Preface read bounded by
+  `ReadHeaderTimeout`, 16 frames, 16 KiB/frame; clients that never send
+  the preface are dropped, preconnects are served. One shared
+  `http2.Server` via `ConfigureServer`, or `Shutdown` hangs on open h2
+  conns. `ServeTLS`/`Protocols` rejected: they redo TLS and lose the
+  ClientHello. (09-28)
 - **XFF only behind `-trusted-proxy-cidrs`**, rightmost untrusted hop. (09-22)
 - **Redis signals fail open via one shared circuit** (1 s, one probe). (09-21)
 - **Unknown-host DB lookups: 8 concurrent, same host shared**, overflow
@@ -71,9 +76,18 @@ New entry format: `- **Choice** — why. Rejected: … (date)`
   forged tokens can't force outbound calls. (09-22)
 - **Supabase Auth**, not our own bcrypt/JWT. (09-21)
 - **Bare-path routes, handlers check method** (Go 1.22 patterns dropped). (09-21)
+- **Origin Host rewrite is opt-in** (`-origin-host-from-target`), for
+  split-host staging whose origin routes by vhost; default keeps the
+  visitor Host. (09-28)
 - **CI: gosec, errorlint, bodyclose, nilerr, sqlclosecheck, govulncheck,
   20 s fuzz.** Rejected: nilaway (17 findings, 0 real), contextcheck/noctx,
   CodeQL (paid for private), per-PR ClusterFuzzLite (minutes). (09-25)
+
+## Detection additions
+
+- **Crawler UA claims don't skip `crawl_pattern`**; only DNS-verified
+  crawlers are exempt. Unverified crawlers >60 pages/min may be
+  challenged under enforce — review in shadow. (09-25)
 
 ## Policy and data
 
@@ -94,6 +108,9 @@ New entry format: `- **Choice** — why. Rejected: … (date)`
 
 - **DigitalOcean Bangalore**, origin in the same region. (09-23)
 - **Nothing that terminates TLS in front of us.** (09-22)
+- **Dashboard on Cloudflare Pages** (Direct Upload, Node 24, build gate on
+  Supabase/API env); marketing-only until the backend API is live. Pages is
+  never in front of the proxy. See `dashboard/FRONTEND.md`. (09-25)
 - **Sideband decision API when bandwidth dominates** (item 27). (09-22)
 
 ## Threats we have studied (research memory)

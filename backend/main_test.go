@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/ToufiqQureshi/hakaishield/pkg/core"
 	"github.com/ToufiqQureshi/hakaishield/pkg/signals"
 	"github.com/ToufiqQureshi/hakaishield/pkg/tenant"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestRedactCredentials(t *testing.T) {
@@ -63,6 +65,40 @@ func TestDefaultTenantOwnerRequiresMatchingLiveRoute(t *testing.T) {
 		if owner, err := matchingDefaultOwner(tc.host, tc.target, tc.status, "user-1", "client.example", "https://origin.example"); err == nil || owner != "" {
 			t.Fatalf("mismatched row %+v yielded owner=%q err=%v", tc, owner, err)
 		}
+	}
+}
+
+func TestLookupDefaultOwnerUsesConfiguredHost(t *testing.T) {
+	const (
+		host   = "shield.example.com"
+		target = "https://origin.example.com"
+	)
+	var lookedUpHost string
+	loader := func(_ context.Context, gotHost string) (id, rowTarget, mode, evidenceToken, status, ownerUserID string, err error) {
+		lookedUpHost = gotHost
+		return "7a5af8bf-08aa-4cba-b237-abf0a1d0aabc", target, "shadow", "", tenant.StatusActive, "user-1", nil
+	}
+
+	owner, err := lookupDefaultOwner(context.Background(), host, target, loader)
+	if err != nil {
+		t.Fatalf("lookupDefaultOwner: %v", err)
+	}
+	if lookedUpHost != host {
+		t.Fatalf("loader host = %q, want configured host %q", lookedUpHost, host)
+	}
+	if owner != "user-1" {
+		t.Fatalf("owner = %q, want user-1", owner)
+	}
+}
+
+func TestLookupDefaultOwnerAllowsMissingPilotRow(t *testing.T) {
+	loader := func(context.Context, string) (id, target, mode, evidenceToken, status, ownerUserID string, err error) {
+		return "", "", "", "", "", "", pgx.ErrNoRows
+	}
+
+	owner, err := lookupDefaultOwner(context.Background(), "shield.example.com", "https://origin.example.com", loader)
+	if err != nil || owner != "" {
+		t.Fatalf("missing row yielded owner=%q err=%v, want empty owner and no error", owner, err)
 	}
 }
 

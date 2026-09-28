@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "node scripts/validate-pages-env.mjs && vite build",
+    "build:pages:marketing": "vite build --mode marketing",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs"
   },

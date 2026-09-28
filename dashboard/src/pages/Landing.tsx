@@ -8,7 +8,9 @@ export default function Landing() {
           <a href="/landing" className="font-bold text-sm">hakaishield</a>
           <div className="flex items-center gap-5 text-sm">
             <a href="#how" style={{ color: 'var(--text-secondary)' }}>How it works</a>
-            <a href="/sign-in" style={{ color: 'var(--text-secondary)' }}>Sign in</a>
+            {import.meta.env.MODE !== 'marketing' && (
+              <a href="/sign-in" style={{ color: 'var(--text-secondary)' }}>Sign in</a>
+            )}
             <a href="/contact" className="btn-primary px-4 py-2 text-xs">Request a pilot</a>
           </div>
         </div>

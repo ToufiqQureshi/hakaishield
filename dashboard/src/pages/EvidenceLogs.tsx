@@ -5,7 +5,7 @@ import { getEvidenceLogs, ApiError, type EvidenceEntry } from '../lib/api';
 import EvidenceSignals from '../components/EvidenceSignals';
 import type { LayoutContext } from '../components/Layout';
 
-const decisions = ['allow', 'challenge', 'block', 'deceive'];
+const decisions = ['allow', 'challenge', 'block', 'deceive', 'rate_limit'];
 
 function getDecisionBadge(decision: string) {
   switch (decision) {
@@ -13,6 +13,7 @@ function getDecisionBadge(decision: string) {
     case 'block': return 'badge-red';
     case 'challenge': return 'badge-yellow';
     case 'deceive': return 'badge-orange';
+    case 'rate_limit': return 'badge-orange';
     default: return 'badge-gray';
   }
 }

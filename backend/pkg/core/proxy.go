@@ -73,6 +73,10 @@ const decisionHeader = "X-HakaiShield-Decision"
 const scoreHeader = "X-HakaiShield-Score"
 const signalsHeader = "X-HakaiShield-Signals"
 
+// h2Header carries the visitor's HTTP/2 greeting fingerprint to the
+// origin alongside the JA4 header, under the same set-by-us rule.
+const h2Header = "X-HakaiShield-HTTP2"
+
 // realIPHeader is the client-IP header we set ourselves. nginx, Rails
 // and Laravel apps commonly read this one.
 const realIPHeader = "X-Real-IP"
@@ -291,6 +295,18 @@ func deceiveResponse(resp *http.Response) error {
 // It forces TLS since a WAF that doesn't protect the origin connection
 // is just security theater.
 func NewOriginProxy(target string) (*httputil.ReverseProxy, error) {
+	return newOriginProxy(target, false)
+}
+
+// NewOriginProxyWithTargetHost sends the target URL's host to the origin.
+// This is for operator-managed deployments where the protected hostname and
+// the origin's virtual host differ, such as a staging hostname in front of a
+// hosted site. The normal constructor preserves the visitor host.
+func NewOriginProxyWithTargetHost(target string) (*httputil.ReverseProxy, error) {
+	return newOriginProxy(target, true)
+}
+
+func newOriginProxy(target string, useTargetHost bool) (*httputil.ReverseProxy, error) {
 	u, err := url.Parse(target)
 	if err != nil {
 		observability.Inc("origin_proxy_invalid_target_total")
@@ -316,9 +332,13 @@ func NewOriginProxy(target string) (*httputil.ReverseProxy, error) {
 		ModifyResponse: deceiveResponse,
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(u)
-			// SetURL would point Host at the origin; the origin serves
-			// the visitor's domain, so it needs the original Host.
-			r.Out.Host = r.In.Host
+			if useTargetHost {
+				r.Out.Host = u.Host
+			} else {
+				// SetURL would point Host at the origin; the origin usually
+				// serves the visitor's domain, so it needs the original Host.
+				r.Out.Host = r.In.Host
+			}
 			// Fills in the real client IP for the origin's logs.
 			r.SetXForwarded()
 			for _, h := range clientIPHeaders {
@@ -340,6 +360,10 @@ func NewOriginProxy(target string) (*httputil.ReverseProxy, error) {
 			ja4 := JA4FromContext(r.In.Context())
 			if ja4 != "" {
 				r.Out.Header.Set(ja4Header, ja4)
+			}
+			r.Out.Header.Del(h2Header)
+			if h2fp := HTTP2FromContext(r.In.Context()); h2fp != "" {
+				r.Out.Header.Set(h2Header, h2fp)
 			}
 
 			// Same rule for the UA-mismatch flag: a visitor doesn't

@@ -115,6 +115,11 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// HTTP/2 greeting fingerprint, captured at TLS termination. Empty
+	// for HTTP/1.1 and unreadable greetings, and never a decision input
+	// until the tool feed has a reviewed false-positive rate.
+	h2fp := HTTP2FromContext(r.Context())
+
 	// Egress measurement: everything written to the visitor from here on
 	// is the tenant's bandwidth cost, whoever wrote it — origin body,
 	// challenge page, or block page. One wrapper around the writer means
@@ -199,7 +204,7 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// Capture the trap request itself. A crawler may leave after
 				// fetching this URL, so waiting for a later request loses it.
 				fired := signals.Evaluate(signals.RequestFacts{
-					IP: ip, JA4: ja4, UA: r.UserAgent(), Header: r.Header,
+					IP: ip, JA4: ja4, HTTP2: h2fp, UA: r.UserAgent(), Header: r.Header,
 					Path: r.URL.Path, Tenant: tenant.ID,
 				}).Fired
 				g.labels.HoneypotTripped(labels.Sample{
@@ -235,7 +240,7 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Passing a puzzle grants temporary challenge relief, not a bypass
 		// of later TLS, tool, honeypot, or crawl evidence. Evaluate once so
 		// Redis counters are incremented only once per request.
-		facts := signals.RequestFacts{IP: ip, JA4: ja4, UA: r.UserAgent(), Header: r.Header, Path: r.URL.Path, Method: r.Method, RouteClass: routeClass, Tenant: tenant.ID}
+		facts := signals.RequestFacts{IP: ip, JA4: ja4, HTTP2: h2fp, UA: r.UserAgent(), Header: r.Header, Path: r.URL.Path, Method: r.Method, RouteClass: routeClass, Tenant: tenant.ID}
 		evaluation := signals.Evaluate(facts)
 		shadowSignals := signals.ShadowSignals(facts)
 		for _, signal := range shadowSignals {
@@ -275,14 +280,16 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	facts := signals.RequestFacts{
-		IP:         ip,
-		JA4:        ja4,
-		UA:         r.UserAgent(),
-		Header:     r.Header,
-		Path:       r.URL.Path,
-		Method:     r.Method,
-		RouteClass: routeClass,
-		Tenant:     tenant.ID,
+		IP:              ip,
+		JA4:             ja4,
+		HTTP2:           h2fp,
+		UA:              r.UserAgent(),
+		Header:          r.Header,
+		Path:            r.URL.Path,
+		Method:          r.Method,
+		RouteClass:      routeClass,
+		Tenant:          tenant.ID,
+		VerifiedGoodBot: verifiedBot,
 	}
 	evaluation := signals.Evaluate(facts)
 	shadowSignals := signals.ShadowSignals(facts)

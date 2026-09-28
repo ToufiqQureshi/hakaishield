@@ -130,6 +130,11 @@ func TestScoreJA4Blocklist(t *testing.T) {
 }
 
 func TestScoreJA4BlocklistWithUAMismatch(t *testing.T) {
+	// Seed the scraper JA4 here: the entry lives in the shared ja4db
+	// state, and relying on another test to have populated it made this
+	// test order-dependent (it failed under -run filters that skipped
+	// that test). The hash is the verified python-requests capture.
+	AddKnownScraperJA4("t12d190800_4464c1bd5eb7_b3394627b738", "python-requests")
 	got := Score(facts("t12d190800_4464c1bd5eb7_b3394627b738", "Mozilla/5.0 Chrome/120.0"))
 	want := 100 + uaMismatchWeight
 	if got != want {

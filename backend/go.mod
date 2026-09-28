@@ -1,6 +1,8 @@
 module github.com/ToufiqQureshi/hakaishield
 
-go 1.25.0
+go 1.26.0
+
+toolchain go1.26.6
 
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
@@ -9,7 +11,8 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/wi1dcard/fingerproxy v1.2.3
-	golang.org/x/sync v0.21.0
+	golang.org/x/net v0.59.0
+	golang.org/x/sync v0.23.0
 )
 
 require (
@@ -24,7 +27,7 @@ require (
 	github.com/refraction-networking/utls v1.6.0 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/crypto v0.30.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )

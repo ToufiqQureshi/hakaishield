@@ -129,26 +129,28 @@ func InitSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
+const tenantByHostQuery = `SELECT id, target, mode, COALESCE(evidence_token, ''), status, COALESCE(owner_user_id::text, '') FROM tenants WHERE host = $1 LIMIT 1`
+
 func GetTenant(ctx context.Context, host string) (id, target, mode, evidenceToken, status, ownerUserID string, err error) {
 	if DB == nil {
 		return "", "", "", "", "", "", fmt.Errorf("database not initialized")
 	}
 
-	query := `SELECT id, target, mode, COALESCE(evidence_token, ''), status, COALESCE(owner_user_id, '') FROM tenants WHERE host = $1 LIMIT 1`
-	err = DB.QueryRow(ctx, query, host).Scan(&id, &target, &mode, &evidenceToken, &status, &ownerUserID)
+	err = DB.QueryRow(ctx, tenantByHostQuery, host).Scan(&id, &target, &mode, &evidenceToken, &status, &ownerUserID)
 	return
 }
 
 // GetTenantByID is GetTenant's counterpart for lookups by internal ID
 // rather than incoming Host header — the dashboard API knows a
 // domain's ID, not the host a live request would carry.
+const tenantByIDQuery = `SELECT host, target, mode, COALESCE(evidence_token, ''), status, COALESCE(owner_user_id::text, '') FROM tenants WHERE id = $1 LIMIT 1`
+
 func GetTenantByID(ctx context.Context, id string) (host, target, mode, evidenceToken, status, ownerUserID string, err error) {
 	if DB == nil {
 		return "", "", "", "", "", "", fmt.Errorf("database not initialized")
 	}
 
-	query := `SELECT host, target, mode, COALESCE(evidence_token, ''), status, COALESCE(owner_user_id, '') FROM tenants WHERE id = $1 LIMIT 1`
-	err = DB.QueryRow(ctx, query, id).Scan(&host, &target, &mode, &evidenceToken, &status, &ownerUserID)
+	err = DB.QueryRow(ctx, tenantByIDQuery, id).Scan(&host, &target, &mode, &evidenceToken, &status, &ownerUserID)
 	return
 }
 

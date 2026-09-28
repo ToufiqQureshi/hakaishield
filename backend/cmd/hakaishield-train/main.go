@@ -28,6 +28,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"time"
@@ -93,8 +94,11 @@ func run(opts runOptions) error {
 	if opts.in == "" && opts.dbURL != "" && !opts.allowUnverifiedLabels {
 		return errors.New("automatically collected labels are unverified; supply curated -in data, or use -allow-unverified-labels for shadow-only experiments")
 	}
-	if opts.holdout < 0 || opts.holdout >= 1 {
+	if math.IsNaN(opts.holdout) || math.IsInf(opts.holdout, 0) || opts.holdout < 0 || opts.holdout >= 1 {
 		return fmt.Errorf("holdout %v must be in [0,1)", opts.holdout)
+	}
+	if opts.approvedBy != "" && (opts.allowUnverifiedLabels || opts.holdout == 0) {
+		return errors.New("approved model requires curated labels and a nonzero holdout; candidate-label or unevaluated models stay unapproved")
 	}
 
 	features := signals.FeatureNames()
@@ -117,6 +121,17 @@ func run(opts runOptions) error {
 	// that reason, since rows come back ordered by time.
 	split := len(samples) - int(float64(len(samples))*opts.holdout)
 	train, test := samples[:split], samples[split:]
+	if opts.approvedBy != "" {
+		humans := 0
+		for _, sample := range test {
+			if !sample.Automated {
+				humans++
+			}
+		}
+		if len(test) < 50 || humans < 5 || len(test)-humans < 5 {
+			return fmt.Errorf("approved model needs a holdout with at least 50 samples, 5 humans and 5 bots; got %d samples, %d humans, %d bots", len(test), humans, len(test)-humans)
+		}
+	}
 
 	trainOpts := decide.DefaultOptions()
 	trainOpts.ChallengeAt = opts.challengeAt

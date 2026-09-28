@@ -46,17 +46,19 @@ const (
 //
 // It is server-observed (the URL path), so it survives every client-side
 // spoof; the cost it imposes is that an attacker must slow down and
-// diversify less to stay hidden. It is deliberately scoped: only
-// browser-claiming clients are counted, so honest crawlers (Googlebot
-// and friends, which openly declare themselves) stay exempt exactly as
-// they are everywhere else (CLAUDE.md Section 8), and static assets are
-// never counted because a real page load produces many of them.
+// diversify less to stay hidden. Browser-claiming clients and declared
+// crawlers are counted. Only a supported crawler whose IP passed
+// reverse/forward DNS verification is exempt; a User-Agent claim alone is
+// not identity proof. Static assets are never counted because a real page
+// load produces many of them.
 //
 // Counting uses a Redis HyperLogLog: cardinality is estimated rather
 // than stored, so memory stays bounded (~12KB) no matter how many paths
 // one IP throws at it (CLAUDE.md Section 15).
 func CrawlPatternSuspected(f RequestFacts) bool {
-	if f.Tenant == "" || f.IP == "" || !claimsBrowser(f.UA) || isStaticAsset(f.Path) || !redisRequestAllowed() {
+	if f.Tenant == "" || f.IP == "" || f.VerifiedGoodBot ||
+		(!claimsBrowser(f.UA) && !claimsCrawler(f.UA)) ||
+		isStaticAsset(f.Path) || !redisRequestAllowed() {
 		return false
 	}
 

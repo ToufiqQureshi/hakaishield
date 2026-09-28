@@ -1,6 +1,6 @@
 # Status — what works, what doesn't, what's next
 
-Updated 2026-09-25. Code and tests are the final truth.
+Updated 2026-09-28. Code and tests are the final truth.
 Read this first, then `CLAUDE.md`.
 
 ## Product in one paragraph
@@ -30,8 +30,8 @@ users never break, and it runs for months without babysitting.
 
 | Area | Works today | Limit |
 |---|---|---|
-| Proxy | TLS, JA4, Host/SNI check, shadow/enforce | HTTP/1.1; one node |
-| Scoring | 9 checks, additive weights, block at 100 | Weights are hand-set guesses |
+| Proxy | TLS, JA4, h2 fingerprint, Host/SNI check, shadow/enforce | h2 signal weight 0; one node |
+| Scoring | 10 checks (9 scored), additive weights, block at 100 | Weights are hand-set guesses |
 | Challenge | Signed PoW + canvas, difficulty 1–3, replay-safe | Telemetry forgeable |
 | Deception (11a) | Decoy HTML + honeypot link | Opt-in; no FP tracking |
 | Good bots | Reverse+forward DNS for 6 search engines | No AI-agent policy yet |
@@ -86,7 +86,8 @@ needs behavioural signals and a browser fingerprint database (items 7, 19).
 - 11 Per-tenant threshold tuning, after shadow data exists
 - 8 Session consistency (timezone vs IP vs OS), corroboration only
 - 9 Route sequences, asset fidelity (pages without CSS/images)
-- HTTP/2 fingerprinting; ClientHello multi-record reassembly
+- Promote h2 fingerprint above weight 0 (needs FP review); ClientHello
+  multi-record reassembly
 - 11b Verified AI-agent policy (Web Bot Auth, RFC 9421)
 - 25/26 Learned model: independent labels, holdout beats rules, a
   person approves. Never auto-retrain.
