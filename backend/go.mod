@@ -2,6 +2,8 @@ module github.com/ToufiqQureshi/hakaishield
 
 go 1.26.0
 
+toolchain go1.26.6
+
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/getsentry/sentry-go v0.49.0
