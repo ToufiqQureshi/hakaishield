@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -119,6 +120,7 @@ func main() {
 
 	addr := flag.String("addr", ":8080", "address to listen on")
 	target := flag.String("target", "", "origin server to protect, e.g. https://example.com")
+	originHostFromTarget := flag.Bool("origin-host-from-target", false, "send the target URL host to the origin when its virtual host differs from the protected hostname")
 	host := flag.String("host", "", "public hostname for the default tenant; empty permits any Host for local development")
 	certFile := flag.String("tls-cert", "", "TLS certificate file; enables TLS + JA4 fingerprinting")
 	keyFile := flag.String("tls-key", "", "TLS private key file, required with -tls-cert")
@@ -244,7 +246,12 @@ func main() {
 	// origins to be public and rechecked on dial to close the SSRF path.
 	store.ProxyFactory = core.NewPublicOriginProxy
 
-	originProxy, err := core.NewOriginProxy(*target)
+	var originProxy *httputil.ReverseProxy
+	if *originHostFromTarget {
+		originProxy, err = core.NewOriginProxyWithTargetHost(*target)
+	} else {
+		originProxy, err = core.NewOriginProxy(*target)
+	}
 	if err != nil {
 		log.Fatalf("hakaishield: creating origin proxy: %v", err)
 	}

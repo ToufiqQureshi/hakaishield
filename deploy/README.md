@@ -65,6 +65,11 @@ bind the client's Supabase Auth ID to the default tenant using the exact SQL in
 Set `HAKAISHIELD_DASHBOARD_ORIGIN` to the exact HTTPS origin serving the static
 dashboard (for example `https://dashboard.example.com`, without a trailing
 slash); the API rejects arbitrary browser origins in the deployed stack.
+By default the proxy preserves the protected visitor hostname when contacting
+the origin. Set `HAKAISHIELD_ORIGIN_HOST_FROM_TARGET=true` only when the public
+protected hostname and the origin's virtual host differ. Hosted staging origins
+such as Cloudflare Pages otherwise reject the protected hostname before serving
+the site.
 
 Keep the domain's A record pointed at the box. Keep `HAKAISHIELD_CHALLENGE_SECRET`
 stable across restarts; changing it invalidates active challenges and cookies.

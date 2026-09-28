@@ -3,6 +3,7 @@
 # Reads from a .env file next to this one:
 #   HAKAISHIELD_DOMAIN=customer.example
 #   HAKAISHIELD_ORIGIN=https://origin.example
+#   HAKAISHIELD_ORIGIN_HOST_FROM_TARGET=false
 #   HAKAISHIELD_MODE=shadow
 #   EVIDENCE_TOKEN=<openssl rand -hex 32>
 #   HAKAISHIELD_CHALLENGE_SECRET=<openssl rand -hex 32>
@@ -53,6 +54,7 @@ services:
     command:
       - "-addr=:8443"
       - "-target=${HAKAISHIELD_ORIGIN:?Set the protected origin URL}"
+      - "-origin-host-from-target=${HAKAISHIELD_ORIGIN_HOST_FROM_TARGET:-false}"
       - "-host=${HAKAISHIELD_DOMAIN:?Set the public hostname}"
       - "-tls-cert=/run/hakaishield/tls/fullchain.pem"
       - "-tls-key=/run/hakaishield/tls/privkey.pem"

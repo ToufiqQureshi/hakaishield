@@ -53,7 +53,9 @@ the production Compose image built locally and its binary started with `-h`.
 The Go suite and `go vet ./...` passed again after the fixed-window velocity
 test was made resilient to a one-second boundary. Windows `go test -race`
 could not start because the C compiler is absent; Linux CI ran the race suite.
-The deployment host still needs a live TLS/origin/browser smoke test.
+The AWS staging host has valid live TLS and a passing health endpoint. The root
+origin path exposed a split-host 403 and must be retested after deploying the
+explicit target-host option; real browser and client-origin smoke tests remain.
 The tenant-isolation, nonce-cap, short-secret and public puzzle-route tests
 were observed failing against the previous behavior and passing after the
 corresponding fixes; the shadow-signal test was compile-red before its code
@@ -140,6 +142,6 @@ binding documents. Public signup is invitation-only until reviewed terms exist.
   shadow mode, because visitors are forwarded without a challenge. They add
   no measured detection coverage to the initial pilot; a reviewed challenge
   cohort is needed before evaluating them against real visitors.
-- No live origin, domain, certificate, load test or real-browser smoke result
-  exists in this workspace yet. A local image build is only a packaging check;
-  the release cannot be called live until these gates run on the chosen host.
+- Public staging DNS, certificate and health now pass. Root origin routing,
+  restart recovery, representative load and real-browser/client-origin checks
+  still need completion before client handoff.

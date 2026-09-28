@@ -163,6 +163,12 @@ own future scoring code. Treat it as an API: changing it breaks both.
 | `X-Real-IP` | The real client address, set by us. |
 | `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto` | Set by us from the real connection. |
 
+The origin receives the visitor's protected `Host` by default. Operator-managed
+split-host deployments may opt into `-origin-host-from-target=true`, which sends
+the hostname from the configured target URL instead. This is needed when a
+staging hostname fronts an origin with strict virtual-host routing; it is never
+derived from visitor input.
+
 **Every one of these is stripped from the inbound request before we
 set our own value.** A visitor cannot forge any of them. That is not
 a detail — a spoofable signal is worse than no signal, because the

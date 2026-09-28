@@ -1,6 +1,6 @@
 # HakaiShield: current status and remaining work
 
-**Snapshot:** 2026-09-25, branch `release/client-pilot-hardening`. Read this file first for the
+**Snapshot:** 2026-09-28, branch `release/client-pilot-hardening`. Read this file first for the
 handoff; `CLIENT_PILOT_RELEASE.md` is the operational release checklist,
 `SIGNAL_COVERAGE.md` is the signal inventory, and `CLIENT_READY_IMPLEMENTATION_PLAN.md`
 is the client-ready and detection implementation plan. Code and tests remain the final source
@@ -8,27 +8,25 @@ of truth.
 
 ## Honest product status
 
-The code supports a **managed, one-domain, one-node shadow pilot**. It is not a
-live customer deployment in this workspace: the client domain, server, origin,
-production TLS, dashboard URL, real browser smoke test, and labelled production
-traffic have not been supplied or verified here. **70–80% bot detection is a
-target, not a measured result.** A local build and bot ladder cannot establish
-population-level recall or false-positive rate. Do not promise production
-availability or enable enforcement from this document alone.
+The code supports a **managed, one-domain, one-node shadow pilot**. An owned AWS
+staging deployment now has public DNS and valid TLS, but it is not a completed
+client handoff: the real client domain/origin, authenticated tenant binding,
+full browser journeys, restart/load checks, and labelled production traffic
+remain unverified. **70–80% bot detection is a target, not a measured result.**
+A staging health check and bot ladder cannot establish population-level recall
+or false-positive rate. Do not promise production availability or enable
+enforcement from this document alone.
 
-The `hakaishield-dashboard` Cloudflare Pages Direct Upload project has a public
-marketing deployment at `https://hakaishield-dashboard.pages.dev`. The owner
-chose `https://interviewyaar.lol`; its custom-domain DNS/certificate activation
-is being verified. This build serves landing, pricing, docs, contact and legal
-pages, with no authenticated dashboard route. The full dashboard build has a
-Pages-specific validation gate for public Supabase and HTTPS backend API values.
-Supabase Auth redirects and backend CORS origin remain open. The client-facing
-API URL is `https://<protected-client-domain>/api/v1` under the current
-single-host backend deployment, so it cannot be finalized before that domain
-is known. The proxy/detection backend has not been deployed.
+The `hakaishield-dashboard` Cloudflare Pages deployment serves
+`https://interviewyaar.lol`; the current public build is the marketing surface,
+not the authenticated dashboard. The AWS proxy is reachable at
+`https://shield.interviewyaar.lol`, where public TLS and the health endpoint
+pass. Its root path needs the tested split-host option deployed before it can
+proxy the Pages site successfully. Supabase Auth redirects, tenant ownership,
+the authenticated dashboard build, and its final API URL remain launch work.
 
 PR #19 merged an earlier release snapshot to `main`. Later audit commits are
-pushed only to `release/client-pilot-hardening`; the workflow
+being finalized on `release/client-pilot-hardening`; the workflow
 runs on pull requests and `main`, so these later commits have no remote CI run
 yet. The worktree also has concurrent, uncommitted HTTP/2 code and unrelated
 changes in `graphify-out/`, `patchright_test.py`, `bot_shield_test.py`, and
@@ -39,7 +37,7 @@ Inspect `git status` before staging and do not sweep those into a docs commit.
 
 | Area | Current behavior | Limit that matters |
 |---|---|---|
-| Inline proxy | Go terminates TLS, captures ClientHello/JA4, checks Host/SNI, forwards to an origin, and supports `shadow` or `enforce`. | The pilot is one node; live TLS, latency and recovery are unmeasured. |
+| Inline proxy | Go terminates TLS, captures ClientHello/JA4, checks Host/SNI, forwards to an origin, and supports `shadow` or `enforce`. A deployment can explicitly use the target URL's virtual host when a staging hostname fronts a separately hosted origin. | The AWS pilot is one node; public TLS and health pass, while restart recovery and representative latency remain unmeasured. |
 | Scored detection | Nine scored checks cover TLS/UA/header mismatch, known bad JA4, openly named scripting tools, per-IP velocity in **five endpoint-class buckets** (login 10/s, API 100, checkout 20, nav 20, assets 300 per 1s window), per-JA4 velocity, distinct-path crawling, and a tenant honeypot. Unverified crawler UA claims now enter the existing distinct-path check; supported crawlers remain exempt only after reverse/forward DNS verification. Authenticated customers can save exact login/checkout route labels in a versioned shadow policy; labels affect the existing velocity check only after policy activation. Redis keys are tenant-scoped. | A real browser with plausible headers and slow requests can evade these checks. Unverified crawlers crossing 60 distinct pages/minute may be challenged in enforce mode; thresholds need client traffic calibration. |
 | Challenge and continuous trust | Signed, host-bound challenge/cookies, bounded proof-of-work and canvas checks, nonce replay protection, adaptive difficulty, and rescoring after a passed cookie. The verify path now has a bounded concurrent admission ceiling (64; overflow gets a counted 503), and per-tenant solve/fail outcomes feed the dashboard. Fresh high-confidence evidence can still block; velocity/crawl can rate-limit. | A scripted client can forge browser telemetry and PNG proof. In proxy shadow mode visitors never see this challenge. |
 | Additional observations | Chromium client-hint contradictions are recorded as `shadowSignals` during normal proxy shadow traffic. Four more candidates—WebGPU f16 absence, duplicate canvas output, pointer inactivity, and legacy automation globals—are recorded only after a valid **enforced** challenge solve. | None changes score or action. The four challenge-only candidates collect **no real-visitor samples in initial proxy shadow mode**. |
@@ -168,11 +166,17 @@ The route-label and retention changes passed focused red/green and mutation
 checks, including temporary-Postgres tests for batch deletion and policy
 persistence. Earlier branch work passed a production Docker image build,
 binary `-h`, shell syntax, and a TLS permission/renewal fixture confirming
-UID/GID 65532 can read the key while an unrelated user cannot. The current
-local image was rebuilt and its `-h` command started; it has not been
-browser-smoked on a real domain. No production
-HTTPS, representative load, cert renewal on the target host, or measured
-bot-catch test has passed.
+UID/GID 65532 can read the key while an unrelated user cannot. On 2026-09-26,
+the AWS staging host served a valid Let's Encrypt certificate and returned 200
+from the public health endpoint; Certbot renewal dry-run passed, Redis was
+healthy, and startup logs confirmed shadow mode. The 2026-09-28 recheck again
+passed certificate and public health validation. The root path exposed a real
+split-host integration bug: Cloudflare Pages rejected the protected staging
+Host with 403. An explicit target-host option was added with red/green and
+mutation coverage; it still needs deployment after the operator's changed IP
+is allowed through the SSH security rule. Restart recovery, representative
+load, full browser journeys, tenant owner binding, and measured bot recall/FPR
+have not passed.
 
 ## Documentation cleanup and next-agent entry point
 

@@ -1958,3 +1958,20 @@ challenge after 60 distinct page paths in a 60-second window once enforcement
 is enabled. Review the client's crawler traffic in shadow mode. Only declared
 crawlers add the existing bounded Redis HyperLogLog work; Redis failures still
 fail open, and DNS verification retains its concurrency budget.
+
+---
+
+## Origin Host rewriting is explicit for split-host deployments — 2026-09-28
+
+**Decision:** Preserve the protected visitor Host at the origin by default.
+Add an operator-only `origin-host-from-target` option that instead sends the
+configured target URL's host. Compose exposes it as
+`HAKAISHIELD_ORIGIN_HOST_FROM_TARGET`, default false.
+
+**Why:** The public AWS staging hostname and its Cloudflare Pages origin use
+different virtual hosts. Public TLS and health passed, but the root request
+returned Cloudflare 403 because Pages received the staging Host. Always
+rewriting Host would silently change the existing proxy contract and could
+break client origins that serve their protected domain. An explicit option
+fixes the observed deployment gap while keeping current behavior unchanged for
+normal client domains. The value is operator configuration, not visitor input.

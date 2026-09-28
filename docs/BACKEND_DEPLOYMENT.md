@@ -1,6 +1,6 @@
 # Backend deployment handoff
 
-Last updated: 2026-09-26
+Last updated: 2026-09-28
 
 This document records the live infrastructure inventory and the exact operator
 steps for the first managed pilot. It must never contain passwords, private
@@ -144,6 +144,15 @@ GitHub, the server, a ticket, or chat.
    worktree changes; rerun the required checks and push the release branch.
 8. Allocate a stable address or another stable ingress before giving DNS to a
    paying client because the current auto-assigned IPv4 changes on stop/start.
+
+The 2026-09-28 recheck found the health endpoint and certificate valid, but
+the proxied root returned Cloudflare 403 because the staging hostname differs
+from the Pages origin's virtual host. The explicit
+`HAKAISHIELD_ORIGIN_HOST_FROM_TARGET=true` deployment option fixes this setup;
+its default remains false so normal client origins continue receiving the
+protected visitor hostname. The operator's public IP also changed, so EC2 SSH
+source must be updated from the old `/32` to the current operator `/32` before
+the new image can be deployed and the remaining checks can run.
 
 ## Capacity note
 

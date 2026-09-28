@@ -23,6 +23,7 @@ EnvironmentFile=/opt/hakaishield/.env
 ExecStart=/opt/hakaishield/hakaishield \
     -addr=:443 \
     -target=${HAKAISHIELD_ORIGIN} \
+    -origin-host-from-target=${HAKAISHIELD_ORIGIN_HOST_FROM_TARGET} \
     -host=${HAKAISHIELD_DOMAIN} \
     -tls-cert=/etc/letsencrypt/live/${HAKAISHIELD_DOMAIN}/fullchain.pem \
     -tls-key=/etc/letsencrypt/live/${HAKAISHIELD_DOMAIN}/privkey.pem \

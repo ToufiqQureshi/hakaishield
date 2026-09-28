@@ -75,6 +75,57 @@ func TestNewOriginProxyUsesResolvedClientIP(t *testing.T) {
 	}
 }
 
+func TestNewOriginProxyWithTargetHost(t *testing.T) {
+	var receivedHost string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHost = r.Host
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer origin.Close()
+
+	proxy, err := NewOriginProxyWithTargetHost(origin.URL)
+	if err != nil {
+		t.Fatalf("NewOriginProxyWithTargetHost: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "shield.customer.example"
+
+	w := httptest.NewRecorder()
+	proxy.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	wantHost := origin.Listener.Addr().String()
+	if receivedHost != wantHost {
+		t.Fatalf("origin Host = %q, want target host %q", receivedHost, wantHost)
+	}
+}
+
+func TestNewOriginProxyPreservesVisitorHostByDefault(t *testing.T) {
+	var receivedHost string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHost = r.Host
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer origin.Close()
+
+	proxy, err := NewOriginProxy(origin.URL)
+	if err != nil {
+		t.Fatalf("NewOriginProxy: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "customer.example"
+
+	w := httptest.NewRecorder()
+	proxy.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	if receivedHost != "customer.example" {
+		t.Fatalf("origin Host = %q, want visitor host", receivedHost)
+	}
+}
+
 func TestNewOriginProxy_InvalidTarget(t *testing.T) {
 	_, err := NewOriginProxy("://invalid-url")
 	if err == nil {
