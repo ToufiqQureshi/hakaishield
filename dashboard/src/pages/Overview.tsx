@@ -64,6 +64,7 @@ export default function Overview() {
     { label: 'Blocked', value: stats.blocked },
     { label: 'Challenged', value: stats.challenged },
     { label: 'Deceived', value: stats.deceived },
+    { label: 'Rate Limited', value: stats.rateLimited },
   ] : [];
 
   // Format bytes the way the cost conversation needs: a raw byte count
@@ -106,7 +107,7 @@ export default function Overview() {
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading…</p>
       ) : stats && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {metrics.map((m, i) => (
               <div key={i} className="card p-4">
                 <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{m.label}</p>

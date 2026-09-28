@@ -275,14 +275,15 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	facts := signals.RequestFacts{
-		IP:         ip,
-		JA4:        ja4,
-		UA:         r.UserAgent(),
-		Header:     r.Header,
-		Path:       r.URL.Path,
-		Method:     r.Method,
-		RouteClass: routeClass,
-		Tenant:     tenant.ID,
+		IP:              ip,
+		JA4:             ja4,
+		UA:              r.UserAgent(),
+		Header:          r.Header,
+		Path:            r.URL.Path,
+		Method:          r.Method,
+		RouteClass:      routeClass,
+		Tenant:          tenant.ID,
+		VerifiedGoodBot: verifiedBot,
 	}
 	evaluation := signals.Evaluate(facts)
 	shadowSignals := signals.ShadowSignals(facts)

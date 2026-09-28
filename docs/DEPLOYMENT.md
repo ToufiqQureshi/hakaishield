@@ -1,5 +1,9 @@
 # Deployment — where, what it costs, how to launch
 
+Step-by-step server runbook (AWS/EC2, Compose, Certbot, staging):
+`deploy/RUNBOOK.md`. Dashboard build and Pages: `dashboard/FRONTEND.md`.
+Marketing site is live on Cloudflare Pages at `interviewyaar.lol`.
+
 Prices checked 2026-09-22/23. Re-check before trusting them.
 Step-by-step commands: `deploy/README.md`.
 

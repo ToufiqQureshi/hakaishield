@@ -1,6 +1,6 @@
 # Build stage. CGO is off so the result is a static binary that runs on the
 # distroless image below without a libc.
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./

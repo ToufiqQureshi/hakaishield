@@ -30,15 +30,62 @@ func TestCrawlPatternNoRedisFailsOpen(t *testing.T) {
 	}
 }
 
-// TestCrawlPatternExemptsNonBrowser: an honest scripted client or crawler
-// that doesn't claim to be a browser is not the target, and must never
-// trip this signal (CLAUDE.md Section 8).
+// An honest non-crawler HTTP client isn't claiming browser navigation
+// behavior, so the crawl-shape check stays neutral for it.
 func TestCrawlPatternExemptsNonBrowser(t *testing.T) {
 	newTestRedis(t)
 	for i := 0; i < maxDistinctPaths+10; i++ {
 		f := RequestFacts{Tenant: "test-tenant", IP: "1.2.3.4", UA: "curl/8.6.0", Path: fmt.Sprintf("/p/%d", i)}
 		if CrawlPatternSuspected(f) {
 			t.Fatal("a non-browser-claiming client must stay exempt from crawl detection")
+		}
+	}
+}
+
+func TestCrawlPatternCountsUnverifiedGoodBotClaim(t *testing.T) {
+	newTestRedis(t)
+	var last bool
+	for i := 0; i < maxDistinctPaths+1; i++ {
+		last = CrawlPatternSuspected(RequestFacts{
+			Tenant: "test-tenant",
+			IP:     "1.2.3.4",
+			UA:     "Mozilla/5.0 (compatible; Googlebot/2.1) Chrome/120.0.0.0",
+			Path:   fmt.Sprintf("/p/%d", i),
+		})
+	}
+	if !last {
+		t.Fatal("unverified Googlebot claim must not bypass server-observed crawl detection")
+	}
+}
+
+func TestCrawlPatternCountsUnverifiedUnknownCrawlerClaim(t *testing.T) {
+	newTestRedis(t)
+	var last bool
+	for i := 0; i < maxDistinctPaths+1; i++ {
+		last = CrawlPatternSuspected(RequestFacts{
+			Tenant: "test-tenant",
+			IP:     "1.2.3.5",
+			UA:     "ExampleSpider/1.0",
+			Path:   fmt.Sprintf("/unknown/%d", i),
+		})
+	}
+	if !last {
+		t.Fatal("unverified crawler declaration must not bypass server-observed crawl detection")
+	}
+}
+
+func TestCrawlPatternExemptsVerifiedGoodBot(t *testing.T) {
+	newTestRedis(t)
+	for i := 0; i < maxDistinctPaths+10; i++ {
+		f := RequestFacts{
+			Tenant:          "test-tenant",
+			IP:              "1.2.3.4",
+			UA:              "Mozilla/5.0 (compatible; Googlebot/2.1) Chrome/120.0.0.0",
+			Path:            fmt.Sprintf("/p/%d", i),
+			VerifiedGoodBot: true,
+		}
+		if CrawlPatternSuspected(f) {
+			t.Fatal("DNS-verified good bot must stay exempt from crawl-pattern scoring")
 		}
 	}
 }

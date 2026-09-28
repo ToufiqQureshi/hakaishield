@@ -89,6 +89,9 @@ type RequestFacts struct {
 	// Tenant scopes per-customer state (currently the honeypot trap) so
 	// one customer's traffic can never influence another's decisions.
 	Tenant string
+	// VerifiedGoodBot is set only after server-side reverse/forward DNS
+	// verification. A claimed crawler UA alone never grants this exemption.
+	VerifiedGoodBot bool
 }
 
 // Evaluation is the complete result of evaluating one request. Keeping the

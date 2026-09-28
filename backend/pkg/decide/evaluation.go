@@ -100,9 +100,9 @@ type CalibrationBucket struct {
 
 // CalibrationBuckets buckets samples by predicted probability in [0,1]
 // into buckets equal-width slices and reports the average prediction and
-// observed bot rate per bucket.
+// observed bot rate per bucket. Counts outside 1..64 return nil.
 func CalibrationBuckets(m *Model, samples []EvalSample, buckets int) []CalibrationBucket {
-	if buckets <= 0 || len(samples) == 0 {
+	if buckets <= 0 || buckets > 64 || len(samples) == 0 {
 		return nil
 	}
 	out := make([]CalibrationBucket, buckets)
@@ -198,35 +198,31 @@ func SplitLeakageSafe(samples []EvalSample, holdoutFrac float64) (train, holdout
 	if splitIdx > n {
 		splitIdx = n
 	}
-	train = byTime[:splitIdx]
-	holdout = byTime[splitIdx:]
-
-	// Identity leakage: move any holdout sample whose identity trained
-	// into the training side. A visitor straddling the boundary is a
-	// training fact, not an independent test — dropping it would lose
-	// the newest data, so it is pulled back instead.
-	seen := make(map[string]bool, len(train))
-	for _, s := range train {
+	// If an identity crosses the cut, advance the cut past its final
+	// observation. Scanning the newly included rows too handles chains of
+	// overlapping identities. This preserves every sample while keeping
+	// the holdout strictly later than the training set.
+	last := make(map[string]int, n)
+	for i, s := range byTime {
 		if s.Identity != "" {
-			seen[s.Identity] = true
+			last[s.Identity] = i
 		}
 	}
-	// train and holdout are slices of one backing array, so neither side
-	// may be grown or re-sliced in place without clobbering the other's
-	// elements. Both results are built as fresh copies; the extra
-	// allocation is per training run, not per request.
-	var moved, kept []EvalSample
-	for _, s := range holdout {
-		if s.Identity != "" && seen[s.Identity] {
-			moved = append(moved, s)
-			continue
+	for i := 0; i < splitIdx; i++ {
+		if end, ok := last[byTime[i].Identity]; ok && end >= splitIdx {
+			splitIdx = end + 1
 		}
-		kept = append(kept, s)
+		// Equal timestamps have no reliable before/after order. Any
+		// rows this adds are scanned by the same loop for identity overlap.
+		for splitIdx < n && byTime[splitIdx].At == byTime[splitIdx-1].At {
+			splitIdx++
+		}
 	}
-	holdoutCopy := make([]EvalSample, len(kept))
-	copy(holdoutCopy, kept)
-	train = append(append([]EvalSample(nil), train...), moved...)
-	return train, holdoutCopy
+	// Return independent backing arrays: callers may grow either set
+	// without silently changing the other one's evaluation rows.
+	train = append([]EvalSample(nil), byTime[:splitIdx]...)
+	holdout = append([]EvalSample(nil), byTime[splitIdx:]...)
+	return train, holdout
 }
 
 // PromotionVerdict states the promotion gate's outcome.
@@ -262,6 +258,7 @@ type SideReport struct {
 func RunPromotion(m *Model, samples []EvalSample) PromotionReport {
 	const minHoldout = 50
 	const minBots = 5
+	const minHumans = 5
 
 	train, holdout := SplitLeakageSafe(samples, 0.2)
 	rep := PromotionReport{
@@ -279,10 +276,10 @@ func RunPromotion(m *Model, samples []EvalSample) PromotionReport {
 	rep.Rules.Metrics = &rulesTrain
 	rep.Rules.Holdout = &rulesHold
 
-	if len(holdout) < minHoldout || holdMetrics.Bots < minBots || rulesHold.Bots < minBots {
+	if len(holdout) < minHoldout || holdMetrics.Bots < minBots || holdMetrics.Humans < minHumans {
 		rep.Decision = hold
-		rep.Reason = fmt.Sprintf("holdout too thin to judge: %d samples, %d model bots, %d rule bots (need >= %d samples, >= %d bots)",
-			len(holdout), holdMetrics.Bots, rulesHold.Bots, minHoldout, minBots)
+		rep.Reason = fmt.Sprintf("holdout too thin to judge: %d samples, %d bots, %d humans (need >= %d samples, >= %d bots, >= %d humans)",
+			len(holdout), holdMetrics.Bots, holdMetrics.Humans, minHoldout, minBots, minHumans)
 		return rep
 	}
 

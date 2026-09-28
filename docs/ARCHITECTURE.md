@@ -45,6 +45,11 @@ Dashboard: static React app + Supabase Auth → authenticated /api/v1.
 | absent | plain HTTP, nothing to fingerprint |
 | `X-Real-IP`, `X-Forwarded-*` | set by us; visitor values stripped |
 
+The origin gets the visitor's `Host` by default. For split-host setups the
+operator may set `-origin-host-from-target=true` (Compose:
+`HAKAISHIELD_ORIGIN_HOST_FROM_TARGET`) to send the target URL's host instead;
+never derived from visitor input.
+
 Treat these as an API. Changing them breaks customers.
 
 ## The nine scored checks
