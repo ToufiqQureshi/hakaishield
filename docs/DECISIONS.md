@@ -1502,6 +1502,8 @@ same pass — rejected: `ROADMAP.md` item 2 already lists "JA4" and
 catches most naive scripted clients (the ROADMAP's own claim). Ship
 one working half instead of both halves half-working.
 **Revisit when:** ROADMAP's HTTP/2 fingerprint item is picked up.
+**RESOLVED 2026-09-25:** h2 is now offered and fingerprinted. See
+"HTTP/2 greeting fingerprinting: evidence-only, weight 0" below.
 
 ## Cap concurrent TLS handshakes at 1000 — 2026-09-14
 **Decision:** `proxy.NewCaptureListener` runs each connection's TLS
@@ -1958,3 +1960,33 @@ challenge after 60 distinct page paths in a 60-second window once enforcement
 is enabled. Review the client's crawler traffic in shadow mode. Only declared
 crawlers add the existing bounded Redis HyperLogLog work; Redis failures still
 fail open, and DNS verification retains its concurrency budget.
+
+## HTTP/2 greeting fingerprinting: evidence-only, weight 0 — 2026-09-28
+**Decision:** The capture listener offers `h2` again. A negotiated h2
+connection goes to `TLSNextProto["h2"]` (`core.WireHTTP2`), which reads
+the client's connection preface (SETTINGS, connection WINDOW_UPDATE,
+PRIORITY frames, first HEADERS pseudo-header order), renders the Akamai
+format fingerprint, replays the consumed bytes, and serves the connection
+with one shared `x/net/http2` server. The fingerprint is carried in the
+connection context, recorded as `h2_tool_match` at **weight 0**, and
+forwarded to the origin as `X-HakaiShield-HTTP2` (visitor copies stripped).
+**Why:** the preface comes from the client's HTTP/2 stack, not
+application code, so a script that fakes a browser UA and even its JA4
+often still greets like Go, curl/nghttp2 or a Python stack. It also
+restores h2 for real browsers, which were being held to HTTP/1.1.
+**Why weight 0:** the seed list has two verified tool captures and no
+browser corpus. It may not score until the Redis feed (`h2:tools`) is
+populated and its false-positive rate is reviewed on pilot traffic.
+**Why one shared server via `http2.ConfigureServer`:** a per-connection
+`http2.Server` is not registered for graceful shutdown, so `srv.Shutdown`
+waited out its full deadline on every open h2 connection
+(`TestWireHTTP2GracefulShutdown`).
+**Limits:** the preface read is bounded by `ReadHeaderTimeout` (10s),
+16 frames and 16 KiB per frame. A client that has not sent the 24-byte
+preface by then is dropped. One that sent the preface but no request yet
+(a browser preconnect) keeps its connection, bounded by the h2 idle
+timeout, and loses only its fingerprint
+(`TestWireHTTP2ServesSlowPreconnect`). A parse failure likewise costs
+only the fingerprint, never the connection.
+**Alternatives considered:** `http.Server.Protocols`/`ServeTLS` —
+rejected, they run their own TLS handshake and lose the ClientHello.

@@ -86,6 +86,10 @@ type RequestFacts struct {
 	// RouteClass is a trusted, activated tenant-policy override for this
 	// exact path. The visitor cannot set it; unknown values are ignored.
 	RouteClass string
+	// HTTP2 is the visitor's HTTP/2 connection-greeting fingerprint,
+	// captured by the TLS termination layer. Empty when the request was
+	// not HTTP/2 or the greeting was unreadable.
+	HTTP2 string
 	// Tenant scopes per-customer state (currently the honeypot trap) so
 	// one customer's traffic can never influence another's decisions.
 	Tenant string
@@ -131,6 +135,16 @@ var checks = []struct {
 	{"ja4_blocklist", 100, func(f RequestFacts) bool {
 		isScraper, _ := IsKnownScraperJA4(f.JA4)
 		return isScraper || badJA4Hashes[f.JA4]
+	}},
+	// h2_tool_match records that the visitor's HTTP/2 greeting matches a
+	// captured automation stack. Weight 0 on purpose: the seeded list is
+	// two tool captures and browser greetings are not in it, so firing
+	// it can contribute evidence but never score. It promotes to a real
+	// weight only after the maintained Redis feed is populated and its
+	// false-positive rate is reviewed on pilot traffic (CLAUDE.md §6/§14).
+	{"h2_tool_match", 0, func(f RequestFacts) bool {
+		isTool, _ := IsKnownToolHTTP2(f.HTTP2)
+		return isTool
 	}},
 	{"scripting_tool", 100, func(f RequestFacts) bool { return IsScriptingTool(f.UA) }},
 	{"velocity_spike", 50, func(f RequestFacts) bool {

@@ -331,10 +331,15 @@ labels, bias correction and held-out comparison remain open (items 25/26).
 
 ## Known architectural limits — BUILT code only
 
-- **HTTP/1.1 only.** The capture listener does not offer h2, because
-  HTTP/2 fingerprinting isn't built. Browsers fall back to HTTP/1.1.
-  Adding h2 is now cheap — stdlib negotiation works precisely because
-  `Accept` returns a real `*tls.Conn`.
+- **HTTP/2 fingerprinting is evidence-only.** The capture listener now
+  offers h2 (`pkg/core.WireHTTP2`): the client's greeting (SETTINGS,
+  WINDOW_UPDATE, PRIORITY, pseudo-header order) is fingerprinted in the
+  Akamai format and served through `golang.org/x/net/http2`'s
+  `ServeConn`, so handlers work unchanged. The `h2_tool_match` check
+  fires at weight 0 — evidence and dashboard visibility only, no score
+  impact — until the Redis `h2:tools` feed is populated and reviewed on
+  real traffic. Browser fingerprints must never be guessed into the
+  seed list; only verified captures ship.
 - **A fragmented ClientHello can't be fingerprinted.** A handshake
   message split across TLS records defeats the capture (it reads one
   record). Reported as `unreadable` so it is visible, but it is not
