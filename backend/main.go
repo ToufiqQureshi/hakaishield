@@ -75,6 +75,12 @@ func loadDotEnv(path string) {
 			_ = os.Setenv(key, value)
 		}
 	}
+	// A read error (such as a line over the 64 KiB scanner limit) stops
+	// the loop early. Starting with half the secrets loaded is worse than
+	// not starting.
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("hakaishield: reading %s: %v", path, err)
+	}
 }
 
 // redactCredentials removes URL userinfo passwords before logging database
@@ -208,6 +214,8 @@ func main() {
 
 	// Start dynamic JA4 synchronization from Redis
 	signals.StartJA4Sync(context.Background(), rdb)
+	// And the HTTP/2 tool fingerprint feed, same pattern.
+	signals.StartHTTP2ToolSync(context.Background(), rdb)
 
 	if *dbURL != "" {
 		if err := db.Init(*dbURL); err != nil {
@@ -401,6 +409,12 @@ func main() {
 		ConnContext:       core.ConnContext,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
+	}
+	// Serve negotiated h2 connections with the maintained x/net/http2
+	// server after their greeting has been fingerprinted. HTTP/1.1
+	// serving is untouched.
+	if err := core.WireHTTP2(srv); err != nil {
+		log.Fatalf("hakaishield: configuring HTTP/2: %v", err)
 	}
 
 	ln, err := net.Listen("tcp", *addr)

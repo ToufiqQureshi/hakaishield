@@ -73,6 +73,10 @@ const decisionHeader = "X-HakaiShield-Decision"
 const scoreHeader = "X-HakaiShield-Score"
 const signalsHeader = "X-HakaiShield-Signals"
 
+// h2Header carries the visitor's HTTP/2 greeting fingerprint to the
+// origin alongside the JA4 header, under the same set-by-us rule.
+const h2Header = "X-HakaiShield-HTTP2"
+
 // realIPHeader is the client-IP header we set ourselves. nginx, Rails
 // and Laravel apps commonly read this one.
 const realIPHeader = "X-Real-IP"
@@ -356,6 +360,10 @@ func newOriginProxy(target string, useTargetHost bool) (*httputil.ReverseProxy, 
 			ja4 := JA4FromContext(r.In.Context())
 			if ja4 != "" {
 				r.Out.Header.Set(ja4Header, ja4)
+			}
+			r.Out.Header.Del(h2Header)
+			if h2fp := HTTP2FromContext(r.In.Context()); h2fp != "" {
+				r.Out.Header.Set(h2Header, h2fp)
 			}
 
 			// Same rule for the UA-mismatch flag: a visitor doesn't

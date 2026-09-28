@@ -11,7 +11,7 @@ Visitor ──TLS──► hakaishield (one Go binary) ──► customer origin
                    ├─ capture   keep raw ClientHello      core/capture.go
                    ├─ JA4       handshake → fingerprint   fingerproxy pkg/ja4
                    ├─ tenant    Host → tenant             tenant/tenant.go
-                   ├─ score     9 checks → risk score     signals/score.go
+                   ├─ score     10 checks → risk score     signals/score.go
                    ├─ policy    tenant policy, shadow     policy/, policyprovider/
                    ├─ act       allow/challenge/rate-limit/deceive/block
                    └─ evidence  why, per request          evidence/
@@ -26,7 +26,11 @@ Dashboard: static React app + Supabase Auth → authenticated /api/v1.
 
 1. Listener wraps each connection to keep the ClientHello, then hands
    net/http a real `*tls.Conn`. net/http owns handshake, timeouts and
-   panics. Only `http/1.1` is offered.
+   panics. `h2` and `http/1.1` are offered. For h2, `core.WireHTTP2`
+   reads the client preface (SETTINGS, WINDOW_UPDATE, PRIORITY,
+   pseudo-header order) into an Akamai-format fingerprint, replays the
+   bytes, then serves via one shared `x/net/http2` server registered
+   for graceful shutdown.
 2. `Rewrite` (not `Director`) strips every client-IP header the visitor
    sent (`X-Forwarded-*`, `X-Real-IP`, `CF-Connecting-IP`…) and sets our
    own. `X-Forwarded-For` is read only behind `-trusted-proxy-cidrs`,
@@ -43,6 +47,7 @@ Dashboard: static React app + Supabase Auth → authenticated /api/v1.
 | `X-HakaiShield-JA4` | JA4 of the visitor's handshake |
 | `X-HakaiShield-JA4: unreadable` | TLS present but ClientHello unparseable |
 | absent | plain HTTP, nothing to fingerprint |
+| `X-HakaiShield-HTTP2` | h2 greeting fingerprint; absent on HTTP/1.1 |
 | `X-Real-IP`, `X-Forwarded-*` | set by us; visitor values stripped |
 
 The origin gets the visitor's `Host` by default. For split-host setups the
@@ -52,7 +57,7 @@ never derived from visitor input.
 
 Treat these as an API. Changing them breaks customers.
 
-## The nine scored checks
+## The ten checks (nine scored)
 
 | Check | Weight | Fires when |
 |---|---|---|
@@ -60,6 +65,7 @@ Treat these as an API. Changing them breaks customers.
 | `ua_mismatch` | 50 | browser UA but TLS 1.0/1.1, unreadable, or scraper JA4 |
 | `header_anomaly` | 25 | browser UA but no `Sec-Fetch-*` / `Sec-CH-UA*` |
 | `ja4_blocklist` | 100 | JA4 on the verified scraper list |
+| `h2_tool_match` | 0 | h2 greeting on the tool list (evidence only) |
 | `scripting_tool` | 100 | UA names itself (curl, python-requests, …) |
 | `velocity_spike` | 50 | per-IP rate over its bucket (see below) |
 | `ja4_velocity_spike` | 50 | one non-browser JA4 > 50 req/s across IPs |
@@ -114,7 +120,7 @@ the login/checkout velocity bucket only after activation.
 
 ## Learned model (`pkg/decide`) — shadow only
 
-- Same 9 checks as a bitmask → logistic regression → probability,
+- Same 10 checks as a bitmask → logistic regression → probability,
   typed decision, per-check contribution. 14 ns, 0 allocs, in-process.
 - Rules decide. The model's opinion is only recorded (`-model`).
 - Never blocks on one signal. Feature list is stored in the model file;
@@ -142,7 +148,8 @@ production p95/p99 not measured yet.
 
 ## Known limits
 
-- HTTP/1.1 only (no h2 fingerprint yet).
+- `h2_tool_match` is weight 0 (evidence only) until the `h2:tools`
+  Redis feed has a reviewed false-positive rate; seed has 2 tool captures.
 - A ClientHello split across TLS records cannot be fingerprinted; it
   shows as `unreadable` and scores, but is not reassembled.
 - Anything that terminates TLS in front of us (CDN, ALB) silently turns

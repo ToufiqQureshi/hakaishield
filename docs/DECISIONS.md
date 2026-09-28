@@ -62,7 +62,12 @@ New entry format: `- **Choice** — why. Rejected: … (date)`
 - **`ReverseProxy.Rewrite`, not `Director`** — Rewrite strips visitor
   `X-Forwarded-*`. Also strip every other client-IP header. (09-14)
 - **Import only fingerproxy `pkg/ja4`** — avoids Prometheus/gopacket. (09-14)
-- **HTTP/1.1 only** until h2 fingerprinting exists. (09-14)
+- **h2 offered and fingerprinted, weight 0.** Preface read bounded by
+  `ReadHeaderTimeout`, 16 frames, 16 KiB/frame; clients that never send
+  the preface are dropped, preconnects are served. One shared
+  `http2.Server` via `ConfigureServer`, or `Shutdown` hangs on open h2
+  conns. `ServeTLS`/`Protocols` rejected: they redo TLS and lose the
+  ClientHello. (09-28)
 - **XFF only behind `-trusted-proxy-cidrs`**, rightmost untrusted hop. (09-22)
 - **Redis signals fail open via one shared circuit** (1 s, one probe). (09-21)
 - **Unknown-host DB lookups: 8 concurrent, same host shared**, overflow
