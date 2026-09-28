@@ -361,3 +361,13 @@ tracks, `pkg/decide` evidence gates, and cloud-cost controls in
 `CLIENT_READY_IMPLEMENTATION_PLAN.md`.
 Gotcha: 80% blocked bots requires measured hard-block recall on independent
 labels; challenges cannot be counted as blocks.
+
+### 2026-09-28 — AWS staging origin routing
+
+`45e4e38a` — Public TLS and health remained valid on the AWS staging host.
+Added an explicit target-host option for split-host origins after Cloudflare
+Pages returned 403 for the protected staging Host; the default still preserves
+the visitor Host. Full Go test/vet/build/lint and Compose config passed.
+Gotcha: changing the target-host rewrite back to the visitor Host made the new
+focused regression fail as expected. The operator IP changed, so deploy/restart/
+load checks wait for the EC2 SSH `/32` rule to be updated.
