@@ -92,7 +92,7 @@ func FingerprintHTTP2Greeting(r io.Reader) (string, error) {
 	g := &HTTP2Greeting{}
 	for i := 0; i < maxGreetingFrames; i++ {
 		f, err := readGreetingFrame(r)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			// Input exhausted between frames: the greeting is simply
 			// over. This is the normal end for a capture of a client
 			// that sends its request on another stream.
@@ -353,7 +353,7 @@ func syncHTTP2Tools(ctx context.Context, rdb *redis.Client) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	fps, err := rdb.HGetAll(timeoutCtx, http2ToolRedisKey).Result()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		log.Printf("hakaishield: error syncing h2 tools from redis: %v", err)
 		return
 	}
