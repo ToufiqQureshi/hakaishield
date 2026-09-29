@@ -19,10 +19,10 @@ var (
 	greaseBrand = regexp.MustCompile(`(?i)not[^a-z0-9]*a[^a-z0-9]*brand`)
 )
 
-// ShadowSignals reports new detection candidates without changing the score.
-// Client hints can expose a forged Chromium version, but browser variants and
+// clientHintSignals reports Chromium client-hint contradictions. Client
+// hints can expose a forged Chromium version, but browser variants and
 // privacy tools need real traffic review before this can affect enforcement.
-func ShadowSignals(f RequestFacts) []string {
+func clientHintSignals(f RequestFacts) []string {
 	if !claimsBrowser(f.UA) || len(f.UA) > 512 {
 		return nil
 	}

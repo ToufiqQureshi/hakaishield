@@ -47,6 +47,9 @@ services:
       # setup.sh copies the current lineage here with key mode 0640 and
       # group 65532. Certbot's root-only tree is never exposed to the app.
       - /etc/hakaishield/tls:/run/hakaishield/tls:ro
+      # Optional ip2asn table for the evidence-only datacenter_ip signal.
+      # See deploy/RUNBOOK.md; an empty directory leaves the signal off.
+      - /etc/hakaishield/asn:/run/hakaishield/asn:ro
     environment:
       HAKAISHIELD_CHALLENGE_SECRET: ${HAKAISHIELD_CHALLENGE_SECRET:?Set a stable random challenge secret}
       EVIDENCE_TOKEN: ${EVIDENCE_TOKEN:?Set a random evidence token}
@@ -63,6 +66,7 @@ services:
       - "-db-url=${DATABASE_URL:?Set the pilot PostgreSQL connection URL}"
       - "-supabase-url=${SUPABASE_URL:?Set the Supabase project URL for dashboard auth}"
       - "-sample-retention-days=${HAKAISHIELD_SAMPLE_RETENTION_DAYS:-30}"
+      - "-asn-db=${HAKAISHIELD_ASN_DB:-}"
       # -collect-labels is deliberately absent. While you are attacking your
       # own site, every solved challenge and honeypot trip would become a
       # training sample and the model would learn what YOUR bots look like.

@@ -85,6 +85,29 @@ Not scored, recorded as `shadowSignals` only: Chromium client-hint
 contradictions; after an enforced solve, WebGPU f16 absence, repeated
 canvas output, pointer inactivity, legacy automation globals.
 
+Stealth-browser candidates, also shadow only (`signals/shadow.go`):
+
+| Signal | Fires when |
+|---|---|
+| `datacenter_ip` | client IP in a cloud/VPS ASN (`-asn-db`, in-memory table) |
+| `h2_ua_family_mismatch` | UA engine ≠ h2 pseudo-header order (Chromium `masp`, Firefox `mpas`, verified captures; iOS/Safari skipped) |
+| `no_subresources` | ≥ 8 page loads in a session, zero CSS/JS/image/fetch |
+| `direct_sensitive_post` | non-GET to a login/checkout route with no page load first |
+| `beacon_webdriver` | page script reported `navigator.webdriver` |
+| `beacon_no_interaction` | ≥ 3 beacons, none with pointer/scroll/key/touch |
+| `beacon_missing` | tenant runs the script, session has ≥ 5 page loads, no beacon |
+
+A session is (tenant, IP, one of 16 UA buckets): one Redis hash of
+counters, 15 min idle expiry. Browser-claiming UAs only; verified
+crawlers skipped; Redis down means no session signal.
+
+Opt-in beacon: the customer adds `<script src="/__hakaishield/b.js"
+async>`. The script sends five 0/1 flags (webdriver, pointer, scroll, key,
+touch) once on `pagehide` to `POST /__hakaishield/beacon` (≤ 256 bytes,
+strict JSON, 204). Both paths are answered by the proxy after the tenant
+lookup and never reach the origin. A beacon is forgeable; it only feeds
+evidence for the sender's own session.
+
 False-positive guards: verified search crawlers (reverse+forward DNS,
 6 h cache, 64 concurrent lookups); honest `bot`/`spider` UAs skip
 browser-impersonation checks; common-browser JA4s skip JA4 velocity.
@@ -148,6 +171,9 @@ production p95/p99 not measured yet.
 
 ## Known limits
 
+- Stealth-browser signals are shadow only. A real browser driven by
+  Patchright on a residential proxy that simulates input and loads assets
+  still passes all of them; they raise cost, they do not close the gap.
 - `h2_tool_match` is weight 0 (evidence only) until the `h2:tools`
   Redis feed has a reviewed false-positive rate; seed has 2 tool captures.
 - A ClientHello split across TLS records cannot be fingerprinted; it

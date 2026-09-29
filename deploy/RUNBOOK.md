@@ -127,6 +127,21 @@ GitHub, the server, a ticket, or chat.
 10. Run normal-browser, headless-browser, velocity, replay, malformed-request,
     challenge, false-positive, and bounded load tests before any enforcement.
 
+## Optional stealth-browser evidence
+
+Both are off until set up; both only add shadow evidence.
+
+- **Datacenter IPs.** On the host:
+  `sudo mkdir -p /etc/hakaishield/asn && sudo curl -fsSL -o
+  /etc/hakaishield/asn/ip2asn-combined.tsv.gz
+  https://iptoasn.com/data/ip2asn-combined.tsv.gz` (public domain, ~9 MB),
+  then set `HAKAISHIELD_ASN_DB=/run/hakaishield/asn/ip2asn-combined.tsv.gz`
+  in `.env` and restart. A bad file stops startup. Refresh monthly.
+- **Behaviour beacon.** The client adds
+  `<script src="/__hakaishield/b.js" async></script>` to their pages. It
+  sends five yes/no flags per page (webdriver, pointer, scroll, key,
+  touch) and nothing identifying; mention it in the pilot privacy terms.
+
 ## Next session checklist
 
 1. Recheck Compose state, restart count, sanitized logs, the public health

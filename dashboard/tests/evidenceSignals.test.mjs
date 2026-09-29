@@ -30,3 +30,22 @@ test('missing shadow signals remain an empty observation', () => {
   }));
   assert.doesNotMatch(html, /Observed/);
 });
+
+test('signals beyond the first three are counted and named, not dropped', () => {
+  const html = renderToStaticMarkup(createElement(EvidenceSignals, {
+    signals: ['a1', 'a2', 'a3', 'a4'],
+    shadowSignals: ['datacenter_ip', 'no_subresources', 'beacon_webdriver', 'beacon_no_interaction', 'h2_ua_family_mismatch'],
+  }));
+  assert.match(html, /\+1 more</);
+  assert.match(html, /title="a4"/);
+  assert.match(html, /\+2 more observed/);
+  assert.match(html, /beacon_no_interaction, h2_ua_family_mismatch/);
+});
+
+test('exactly three signals show no overflow badge', () => {
+  const html = renderToStaticMarkup(createElement(EvidenceSignals, {
+    signals: ['a1', 'a2', 'a3'],
+    shadowSignals: ['b1', 'b2', 'b3'],
+  }));
+  assert.doesNotMatch(html, /more/);
+});

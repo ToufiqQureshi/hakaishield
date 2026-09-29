@@ -342,3 +342,15 @@ Gotcha: adding `h2_tool_match` changed `FeatureVersion`, so any model or
 samples from an older build are refused by design — retrain, don't patch.
 Gotcha: local Go 1.26.5 has 7 stdlib vulns fixed in 1.26.6; build the
 image with `--pull`.
+
+### 2026-09-29 — stealth-browser shadow signals and beacon
+
+`31c1567d` — datacenter_ip (offline ip2asn), h2_ua_family_mismatch
+(verified Chrome/Edge/Firefox captures), no_subresources,
+direct_sensitive_post and an opt-in page beacon; all shadowSignals, no
+score effect. Fixed two pre-existing test flakes on the way.
+Gotcha: Patchright's HTTP/2 greeting is identical to Chrome's; only
+behaviour and origin (IP, assets, input) separate it, and a bot that fakes
+input and uses residential IPs still passes every one of these.
+Gotcha: session keys are UA-bucketed mod 16 on purpose — Redis is
+noeviction and full-UA keys let one IP fill it.

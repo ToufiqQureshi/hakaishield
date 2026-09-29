@@ -1,6 +1,7 @@
 package signals
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -26,6 +27,12 @@ func newTestRedis(t *testing.T) {
 	// boundary. Keep CI load from splitting a burst across one-second buckets.
 	rateLimitMs = 60_000
 	rdb = redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	// Dial before the test starts. Request-path Redis calls have a 50 ms
+	// budget, and a cold TCP dial on a loaded runner can exceed it, which
+	// fails the check open and flakes the test.
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		t.Fatalf("ping miniredis: %v", err)
+	}
 	redisHealth.reset()
 	t.Cleanup(func() { rdb = prev; rateLimitMs = prevWindow })
 }
