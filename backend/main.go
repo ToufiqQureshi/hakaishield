@@ -3,11 +3,13 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"flag"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -142,6 +144,7 @@ func main() {
 	dbURL := flag.String("db-url", os.Getenv("DATABASE_URL"), "PostgreSQL URL for the Supabase project's database (Project Settings > Database in the Supabase dashboard). Falls back to $DATABASE_URL (including from a local .env file) if unset.")
 	collectLabels := flag.Bool("collect-labels", false, "collect candidate observations from solved challenges and honeypot hits. Requires -db-url. Off by default; see docs/ARCHITECTURE.md.")
 	sampleRetentionDays := flag.Int("sample-retention-days", 30, "delete training samples older than this many days, 1-365; background cleanup requires -db-url")
+	asnDBPath := flag.String("asn-db", "", "ip2asn TSV (optionally .gz) from iptoasn.com; enables the evidence-only datacenter_ip signal. Unset leaves it off.")
 	modelPath := flag.String("model", "", "trained decision model (pkg/decide) to score alongside the rules in shadow; it never affects a decision. Unset leaves it off.")
 	supabaseURL := flag.String("supabase-url", os.Getenv("SUPABASE_URL"), "Supabase project URL (e.g. https://xxxx.supabase.co); used to verify dashboard session JWTs against the project's published JWKS. Required, with -db-url, to enable the domains/rules/settings API. Falls back to $SUPABASE_URL (including from a local .env file) if unset.")
 	flag.Parse()
@@ -313,6 +316,16 @@ func main() {
 	}
 
 	// A model scores alongside the rules and is recorded, never acted on.
+	// Same rule for the ASN table: a path that does not load is fatal, so a
+	// typo cannot silently switch the datacenter signal off.
+	if *asnDBPath != "" {
+		n, err := loadASNDB(*asnDBPath)
+		if err != nil {
+			log.Fatalf("hakaishield: -asn-db: %v", err)
+		}
+		log.Printf("hakaishield: ASN table loaded from %s: %d hosting ranges (datacenter_ip is evidence only)", *asnDBPath, n)
+	}
+
 	// A bad model file is fatal rather than ignored: starting anyway would
 	// look like the operator's model was running when it was not.
 	if *modelPath != "" {
@@ -480,4 +493,25 @@ func loadShadowModel(path string) (*decide.Model, error) {
 	// Nothing was written, so a close error says nothing useful.
 	defer func() { _ = f.Close() }()
 	return decide.Load(f, signals.FeatureNames())
+}
+
+// loadASNDB opens the operator's ip2asn file, decompressing it when the
+// name ends in .gz, as iptoasn.com publishes it.
+func loadASNDB(path string) (int, error) {
+	f, err := os.Open(path) // #nosec G304 -- operator-chosen startup flag
+	if err != nil {
+		return 0, err
+	}
+	// Read-only, so a close error says nothing useful.
+	defer func() { _ = f.Close() }()
+	var r io.Reader = f
+	if strings.HasSuffix(path, ".gz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return 0, err
+		}
+		defer func() { _ = gz.Close() }()
+		r = gz
+	}
+	return signals.LoadHostingASNDB(r)
 }

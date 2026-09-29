@@ -220,6 +220,18 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Opt-in behaviour beacon (beacon.go). Handled here, after the tenant
+	// lookup, for the same reason as the honeypot: state is only ever
+	// written for a host we serve. Neither path reaches the origin.
+	switch r.URL.Path {
+	case beaconScriptPath:
+		serveBeaconScript(w, r)
+		return
+	case beaconPath:
+		receiveBeacon(w, r, tenant.ID, ip)
+		return
+	}
+
 	// SEO & Search Engine Crawler Protection:
 	// Genuine verified search engine bots (Googlebot, Bingbot, Applebot) with matching
 	// reverse-forward DNS are forwarded directly without friction or challenges.

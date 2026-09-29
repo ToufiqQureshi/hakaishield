@@ -88,6 +88,25 @@ New entry format: `- **Choice** — why. Rejected: … (date)`
 - **Crawler UA claims don't skip `crawl_pattern`**; only DNS-verified
   crawlers are exempt. Unverified crawlers >60 pages/min may be
   challenged under enforce — review in shadow. (09-25)
+- **Stealth-browser signals are `shadowSignals`, not weight-0 checks.**
+  Keeps `FeatureVersion` stable and no model/sample break; promote one
+  to a scored check only after its FP rate is measured. (09-29)
+- **Datacenter: offline ip2asn table + 16 hosting ASNs**, loaded once at
+  startup (~14k ranges, 0.7 MB, 0.9 s). No external lookup per request.
+  VPN hosts (M247) and Cloudflare (WARP) excluded: real people. Azure/
+  Google corporate egress will still fire. (09-29)
+- **h2 family check uses only verified captures**: Chrome 153, Edge 154,
+  Patchright Chrome (`masp`), Firefox 142 (`mpas`). Safari not captured,
+  so not checked. Patchright greets exactly like Chrome — this catches UA
+  spoofers only. (09-29)
+- **Session key = tenant + IP + UA mod 16.** A full UA hash let one IP
+  mint a Redis key per request by rotating UA; Redis is `noeviction`, so
+  that could break challenge replay storage. (09-29)
+- **Beacon sends five booleans on pagehide**, nothing else: no timings,
+  coordinates, keys or IDs. Forgeable, so it never grants trust; faking
+  input defeats `beacon_no_interaction` (verified with Playwright). (09-29)
+- **Form POSTs don't count as page loads**; otherwise a direct login
+  POST with `Sec-Fetch-Dest: document` would excuse itself. (09-29)
 
 ## Policy and data
 

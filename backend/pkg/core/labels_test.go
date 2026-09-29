@@ -2,12 +2,14 @@ package core_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -140,6 +142,16 @@ func TestUnsolvedChallengeProducesNoLabel(t *testing.T) {
 // A caller that followed the invisible trap link is labelled automated,
 // and the honeypot bit is cleared: leaving it in would make the model
 // learn the label back instead of learning from the other checks.
+// trapSeq gives every honeypot test run its own caller. Honeypot trips are
+// remembered process-wide, so a fixed IP stops being a "first trip" when
+// the test runs again under -count or in a shuffled order.
+var trapSeq atomic.Int32
+
+func freshTrapAddr() string {
+	n := trapSeq.Add(1)
+	return fmt.Sprintf("198.18.%d.%d:5555", n/250, n%250+1)
+}
+
 func TestHoneypotTripBecomesAnAutomatedLabelWithoutItsOwnBit(t *testing.T) {
 	mr, err := miniredis.Run()
 	if err != nil {
@@ -152,14 +164,15 @@ func TestHoneypotTripBecomesAnAutomatedLabelWithoutItsOwnBit(t *testing.T) {
 
 	trap := httptest.NewRequest("GET", "http://example.com"+signals.HoneypotPath, nil)
 	trap.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
-	trap.RemoteAddr = "203.0.113.77:5555"
+	addr := freshTrapAddr()
+	trap.RemoteAddr = addr
 	guard.ServeHTTP(httptest.NewRecorder(), trap)
 
 	// A trap hit must be captured even if this caller never requests
 	// another page. A subsequent request must not duplicate its label.
 	next := httptest.NewRequest("GET", "http://example.com/products", nil)
 	next.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
-	next.RemoteAddr = "203.0.113.77:5555"
+	next.RemoteAddr = addr
 	guard.ServeHTTP(httptest.NewRecorder(), next)
 	recorder.Close()
 
@@ -189,7 +202,7 @@ func TestHoneypotTripBecomesAnAutomatedLabelWithoutItsOwnBit(t *testing.T) {
 func TestHoneypotTripWithoutFollowupProducesALabel(t *testing.T) {
 	guard, _, w, recorder := labelFixture(t, config.PolicyBalanced)
 	trap := httptest.NewRequest("GET", "http://example.com"+signals.HoneypotPath, nil)
-	trap.RemoteAddr = "203.0.113.78:5555"
+	trap.RemoteAddr = freshTrapAddr()
 	guard.ServeHTTP(httptest.NewRecorder(), trap)
 	recorder.Close()
 	got := w.samples()

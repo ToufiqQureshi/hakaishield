@@ -46,8 +46,11 @@ users never break, and it runs for months without babysitting.
 ## What a good bot still gets past
 
 A real browser (Patchright-class), normal headers, not on the JA4
-blocklist, under rate limits, never touching the honeypot. Closing this
-needs behavioural signals and a browser fingerprint database (items 7, 19).
+blocklist, under rate limits, never touching the honeypot. Shadow signals
+now record the cheap tells (datacenter IP, no assets, direct login POST,
+opt-in beacon: webdriver / no input / script never ran). None scores yet;
+a Patchright bot on a residential proxy that loads assets and fakes input
+still passes. Scoring them needs pilot FP data; the moat is item 19.
 
 ## Launch gate — before the first client request
 
@@ -80,12 +83,13 @@ needs behavioural signals and a browser fingerprint database (items 7, 19).
 - Durable evidence and shadow stats; multi-node replay/failover
 
 **Detection (add only when labelled traffic shows the gap):**
-- 7 Behavioural signals: opt-in first-party script, coarse timing
-  buckets only, never keystrokes or raw mouse paths. Evidence first.
+- 7 Behavioural signals: opt-in beacon **built, shadow only** (09-29).
+  Next: measure FP on pilot, then weigh.
 - 19 Known-browser JA4 database — the real moat. Versioned, expiring.
 - 11 Per-tenant threshold tuning, after shadow data exists
 - 8 Session consistency (timezone vs IP vs OS), corroboration only
-- 9 Route sequences, asset fidelity (pages without CSS/images)
+- 9 Asset fidelity and direct login/checkout POST **built, shadow only**
+  (09-29); longer route sequences still open
 - Promote h2 fingerprint above weight 0 (needs FP review); ClientHello
   multi-record reassembly
 - 11b Verified AI-agent policy (Web Bot Auth, RFC 9421)
