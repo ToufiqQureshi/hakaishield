@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import RequireAuth from './components/RequireAuth';
@@ -40,6 +40,7 @@ function App() {
           {/* Authentication Pages */}
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
+          <Route path="/login" element={<Navigate to="/sign-in" replace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
 
@@ -57,6 +58,9 @@ function App() {
               <Route path="domains-siem" element={<DomainsSiem />} />
             </Route>
           </Route>
+
+          {/* Unknown URLs used to render a blank page. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
