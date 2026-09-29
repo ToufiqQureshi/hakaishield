@@ -354,3 +354,17 @@ behaviour and origin (IP, assets, input) separate it, and a bot that fakes
 input and uses residential IPs still passes every one of these.
 Gotcha: session keys are UA-bucketed mod 16 on purpose — Redis is
 noeviction and full-UA keys let one IP fill it.
+
+### 2026-09-29 — pilot live on EC2 + full dashboard on Pages
+
+`20fa3c78` deployed to EC2 `13.233.137.100` (t2.micro, ap-south-1) as
+`shield.interviewyaar.lol`, shadow mode, ASN table loaded (10,371 hosting
+ranges). Full dashboard deployed by `wrangler pages deploy` to
+`hakaishield-dashboard` (serves `interviewyaar.lol`), API base
+`https://shield.interviewyaar.lol/api/v1`.
+Gotcha: the origin `interviewyaar.lol` is behind Cloudflare, which 403s
+`Host: shield.interviewyaar.lol`; the previous deploy served that 403 to every
+visitor. `HAKAISHIELD_ORIGIN_HOST_FROM_TARGET=true` is required here.
+Gotcha: `/opt/hakaishield` is a copied tree, not a git checkout; the deployed
+commit is in `/opt/hakaishield/DEPLOYED_COMMIT`. No Elastic IP yet — a
+stop/start changes the IP and breaks DNS.
