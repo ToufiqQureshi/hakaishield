@@ -69,7 +69,7 @@ export default function Subscription() {
             <button onClick={toggleTheme} className="text-sm" style={{ color: 'var(--text-muted)' }}>
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
-            <a href="/" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
+            <a href="/sign-in" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
           </div>
         </div>
       </nav>

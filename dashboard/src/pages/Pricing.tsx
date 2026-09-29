@@ -16,7 +16,7 @@ export default function Pricing() {
             <button onClick={toggleTheme} className="text-sm" style={{ color: 'var(--text-muted)' }}>
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
-            <a href="/" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
+            <a href="/sign-in" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
           </div>
         </div>
       </nav>
@@ -239,7 +239,7 @@ export default function Pricing() {
           <span className="text-sm font-bold tracking-tight">hakaishield</span>
           <div className="flex gap-6 text-xs" style={{ color: 'var(--text-muted)' }}>
             <a href="/landing">Home</a>
-            <a href="/">Dashboard</a>
+            <a href="/sign-in">Dashboard</a>
             <a href="/docs">Docs</a>
             <span>© 2026</span>
           </div>

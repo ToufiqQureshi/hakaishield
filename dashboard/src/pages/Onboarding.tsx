@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { stepComplete, type OnboardingAnswers } from '../lib/onboarding';
 
 export default function Onboarding() {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<OnboardingAnswers>({
     useCase: '',
     monthlyVisitors: '',
     website: '',
@@ -23,13 +24,14 @@ export default function Onboarding() {
     setError(null);
     setSubmitting(true);
     try {
-      // The questionnaire answers (useCase, monthlyVisitors, teamSize,
-      // botProblem) aren't persisted — no table for them exists (see
-      // docs/PROGRESS.md). Only the completion flag is saved, in
-      // Supabase's own user_metadata, which is what actually gates
-      // the redirect in SignIn/RequireAuth.
+      if (!stepComplete(1, formData) || !stepComplete(2, formData) || !stepComplete(3, formData)) {
+        throw new Error('Answer every question before finishing setup.');
+      }
+      // Answers live in the user's own Supabase user_metadata, where the
+      // operator reads them when setting up the pilot. onboarding_complete
+      // is what SignIn checks to skip this page next time.
       const { error: updateError } = await supabase.auth.updateUser({
-        data: { onboarding_complete: true },
+        data: { onboarding_complete: true, onboarding: { ...formData, website: formData.website.trim() } },
       });
       if (updateError) throw updateError;
       navigate('/domains-siem');
@@ -44,7 +46,9 @@ export default function Onboarding() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const nextStep = () => setStep(step + 1);
+  const nextStep = () => {
+    if (stepComplete(step, formData)) setStep(step + 1);
+  };
   const prevStep = () => setStep(step - 1);
 
   return (
@@ -109,7 +113,7 @@ export default function Onboarding() {
                 </div>
 
                 <div className="mt-8 flex justify-end">
-                  <button type="button" onClick={nextStep} className="group btn-primary px-6 py-2.5 text-sm flex items-center gap-2">
+                  <button type="button" onClick={nextStep} disabled={!stepComplete(step, formData)} className="group btn-primary px-6 py-2.5 text-sm flex items-center gap-2 disabled:opacity-60">
                     Continue
                     <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
                   </button>
@@ -184,7 +188,7 @@ export default function Onboarding() {
                     <ArrowLeft size={14} />
                     Back
                   </button>
-                  <button type="button" onClick={nextStep} className="group btn-primary px-6 py-2.5 text-sm flex items-center gap-2">
+                  <button type="button" onClick={nextStep} disabled={!stepComplete(step, formData)} className="group btn-primary px-6 py-2.5 text-sm flex items-center gap-2 disabled:opacity-60">
                     Continue
                     <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
                   </button>
@@ -242,7 +246,7 @@ export default function Onboarding() {
                     <ArrowLeft size={14} />
                     Back
                   </button>
-                  <button type="submit" disabled={submitting} className="group btn-primary px-6 py-2.5 text-sm flex items-center gap-2 disabled:opacity-60">
+                  <button type="submit" disabled={submitting || !stepComplete(3, formData)} className="group btn-primary px-6 py-2.5 text-sm flex items-center gap-2 disabled:opacity-60">
                     {submitting ? 'Saving…' : 'Complete setup'}
                     <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
                   </button>

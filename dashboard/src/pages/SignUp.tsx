@@ -26,6 +26,9 @@ export default function SignUp() {
         email: formData.email,
         password: formData.password,
         options: {
+          // Without this the confirmation link returns to Supabase's Site
+          // URL, which is still http://localhost:3000 for this project.
+          emailRedirectTo: `${window.location.origin}/sign-in`,
           data: { name: formData.name, company: formData.company || undefined },
         },
       });

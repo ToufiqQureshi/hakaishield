@@ -26,7 +26,7 @@ export default function Landing() {
             <button onClick={toggleTheme} className="text-sm" style={{ color: 'var(--text-muted)' }}>
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
-            <a href="/" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
+            <a href="/sign-in" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
             <a href="/contact" className="btn-primary text-xs py-1.5 px-3">Request a pilot</a>
           </div>
         </div>

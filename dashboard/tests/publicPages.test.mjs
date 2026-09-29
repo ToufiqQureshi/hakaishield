@@ -75,5 +75,8 @@ test('public pages make no claims the product cannot keep', () => {
     for (const pattern of banned) {
       assert.doesNotMatch(source, pattern, `${name} contains ${pattern}`);
     }
+    // / shows the landing page to signed-out visitors, so a "Dashboard"
+    // link there loops back to the landing page instead of signing in.
+    assert.doesNotMatch(source, /href="\/"[^>]*>\s*Dashboard/, `${name} links Dashboard to /`);
   }
 });
