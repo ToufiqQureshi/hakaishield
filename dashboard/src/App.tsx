@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import RequireAuth from './components/RequireAuth';
@@ -15,6 +15,7 @@ import Contact from './pages/Contact';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
 import Subscription from './pages/Subscription';
 import Payment from './pages/Payment';
@@ -40,7 +41,9 @@ function App() {
           {/* Authentication Pages */}
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
+          <Route path="/login" element={<Navigate to="/sign-in" replace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
 
           {/* Subscription & Payment */}
@@ -57,6 +60,9 @@ function App() {
               <Route path="domains-siem" element={<DomainsSiem />} />
             </Route>
           </Route>
+
+          {/* Unknown URLs used to render a blank page. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

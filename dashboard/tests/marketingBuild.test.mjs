@@ -30,7 +30,7 @@ test('marketing Pages build works without backend or Supabase config', () => {
     const scripts = jsFiles
       .map((name) => readFileSync(join(output, 'assets', name), 'utf8'))
       .join('\n');
-    assert.match(scripts, /See automated traffic/);
+    assert.match(scripts, /We read the TLS/);
     assert.equal(
       /VITE_API_BASE_URL|VITE_SUPABASE_ANON_KEY|sb_publishable_|supabase\.co|must be set for production dashboard builds/.test(scripts),
       false,

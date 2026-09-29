@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { signedOutPath } from '../lib/authRedirect';
 import { supabase } from '../lib/supabaseClient';
 
 // Gates the dashboard routes behind a signed-in Supabase session.
@@ -9,6 +10,7 @@ import { supabase } from '../lib/supabaseClient';
 // worse than a brief loading state for a session that turns out valid.
 export default function RequireAuth() {
   const [status, setStatus] = useState<'checking' | 'signed-in' | 'signed-out'>('checking');
+  const { pathname } = useLocation();
 
   useEffect(() => {
     let cancelled = false;
@@ -25,6 +27,6 @@ export default function RequireAuth() {
   }, []);
 
   if (status === 'checking') return null;
-  if (status === 'signed-out') return <Navigate to="/sign-in" replace />;
+  if (status === 'signed-out') return <Navigate to={signedOutPath(pathname)} replace />;
   return <Outlet />;
 }
