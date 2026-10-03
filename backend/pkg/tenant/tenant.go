@@ -80,6 +80,15 @@ type Store struct {
 	lookups      singleflight.Group
 	ProxyFactory ProxyFactory
 	TenantLoader TenantLoader
+
+	// Durable evidence is opt-in. When EvidenceWriter is set, every new
+	// tenant's trail writes through to it, and EvidenceSink is read once at
+	// load time to seed the in-memory ring so a restart does not erase the
+	// history a customer can see. EvidenceWriter/EvidenceSink are set before
+	// any tenant is added and never change afterwards.
+	EvidenceWriter *evidence.Writer
+	EvidenceSink   evidence.Sink
+	EvidenceWindow time.Duration
 }
 
 // NewStore creates a store for testing or single-node deployments.
@@ -112,6 +121,9 @@ func (s *Store) Add(id string, config TenantConfig, hosts []string, origin *http
 		Trail:        evidence.NewTrail(),
 		PolicyShadow: evidence.NewShadowStats(),
 		Origin:       origin,
+	}
+	if s.EvidenceWriter != nil {
+		t.Trail.EnablePersistence(id, s.EvidenceWriter)
 	}
 
 	s.mu.Lock()
@@ -261,7 +273,7 @@ func (s *Store) fetchFromDB(host string) (*Tenant, error) {
 		return nil, ErrTenantNotFound
 	}
 
-	return s.addFromDBRow(id, host, target, modeStr, evidenceToken, status, ownerUserID)
+	return s.addFromDBRow(ctx, id, host, target, modeStr, evidenceToken, status, ownerUserID)
 }
 
 // addFromDBRow turns one tenants-table row into a live Tenant and
@@ -269,7 +281,7 @@ func (s *Store) fetchFromDB(host string) (*Tenant, error) {
 // found the row by ID and a proxy request that finds it later by host
 // share the same in-memory Stats/Trail rather than each starting a
 // fresh one.
-func (s *Store) addFromDBRow(id, host, target, modeStr, evidenceToken, status, ownerUserID string) (*Tenant, error) {
+func (s *Store) addFromDBRow(ctx context.Context, id, host, target, modeStr, evidenceToken, status, ownerUserID string) (*Tenant, error) {
 	// A stored mode we can't parse must never silently decide behaviour.
 	// Treat an unknown value as enforce (fail closed) and say so, rather
 	// than letting Go's zero value quietly pick a mode for a live tenant.
@@ -296,8 +308,13 @@ func (s *Store) addFromDBRow(id, host, target, modeStr, evidenceToken, status, o
 	}
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.byID[id], nil
+	t, ok := s.byID[id]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, ErrTenantNotFound
+	}
+	s.hydrateEvidence(ctx, t)
+	return t, nil
 }
 
 // GetByID looks up a tenant by their internal ID (for dashboard API
@@ -323,7 +340,44 @@ func (s *Store) GetByID(id string) (*Tenant, error) {
 		return nil, ErrTenantNotFound
 	}
 
-	return s.addFromDBRow(id, host, target, modeStr, evidenceToken, status, ownerUserID)
+	return s.addFromDBRow(ctx, id, host, target, modeStr, evidenceToken, status, ownerUserID)
+}
+
+// maxHydratedEvidence matches the in-memory ring size: loading more would
+// be overwritten before it could be read.
+const maxHydratedEvidence = 1000
+
+// HydrateEvidence seeds every already-known tenant's trail from durable
+// storage. Call it once at startup, after the default tenant is added.
+func (s *Store) HydrateEvidence(ctx context.Context) {
+	s.mu.RLock()
+	ts := make([]*Tenant, 0, len(s.byID))
+	for _, t := range s.byID {
+		ts = append(ts, t)
+	}
+	s.mu.RUnlock()
+	for _, t := range ts {
+		s.hydrateEvidence(ctx, t)
+	}
+}
+
+// hydrateEvidence reads a tenant's recent durable history into memory. A
+// read failure is logged, not fatal: an empty trail is the same state a
+// non-durable deployment starts in.
+func (s *Store) hydrateEvidence(ctx context.Context, t *Tenant) {
+	if s.EvidenceSink == nil || t == nil {
+		return
+	}
+	window := s.EvidenceWindow
+	if window <= 0 {
+		window = 24 * time.Hour
+	}
+	records, err := s.EvidenceSink.Recent(ctx, t.ID, maxHydratedEvidence, time.Now().Add(-window))
+	if err != nil {
+		log.Printf("hakaishield: loading durable evidence for tenant %q: %v", t.ID, err)
+		return
+	}
+	t.Trail.Load(records)
 }
 
 // OwnerUserID resolves a tenant ID to the dashboard account that owns

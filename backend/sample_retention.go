@@ -38,6 +38,32 @@ func pruneSamples(ctx context.Context, now time.Time, days int, remove func(cont
 	return total, nil
 }
 
+// runEvidenceRetention prunes durable evidence the same way, at startup
+// and hourly, off the request path.
+func runEvidenceRetention(ctx context.Context, days int) {
+	prune := func() {
+		runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		n, err := pruneSamples(runCtx, time.Now().UTC(), days, db.DeleteEvidenceBefore)
+		if err != nil && ctx.Err() == nil {
+			log.Printf("hakaishield: evidence retention failed: %v", err)
+		} else if n > 0 {
+			log.Printf("hakaishield: deleted %d evidence records older than %d days", n, days)
+		}
+	}
+	prune()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			prune()
+		}
+	}
+}
+
 // runSampleRetention prunes at startup and hourly. It runs only off the
 // request path; a failed run is logged and retried at the next tick.
 func runSampleRetention(ctx context.Context, days int) {

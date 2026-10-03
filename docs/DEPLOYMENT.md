@@ -71,6 +71,12 @@ Ways to cut the bill, biggest first:
 No per-request paid calls in the hot path: no LLM, no external
 reputation API, no remote inference, no DNSBL lookup.
 
+Durable evidence (`-durable-evidence`) is the one optional extra cost:
+one small Postgres row per decision, batched off the request path. It is
+storage and write IO, not bandwidth — set `-evidence-retention-days` and
+budget for it. Reads still come from the in-memory ring, so the flag is
+safe to leave off until a client needs history that survives a restart.
+
 ## Launch a pilot
 
 1. Point the domain's A record at the server **before**
@@ -88,9 +94,14 @@ reputation API, no remote inference, no DNSBL lookup.
 
 ### Bind the client's dashboard account
 
-Self-service domain creation is disabled until ownership proof exists.
-After verifying the domain, create the Supabase Auth user, then on a
-fresh pilot database:
+A client can now register a domain and prove ownership themselves: the
+dashboard creates a `pending_verification` row, the client publishes a
+`_hakaishield.<domain>` TXT record, and the verify endpoint flips it to
+`verified` (token cleared). Verified is not protected — TLS, the DNS A
+record and activation are still operator work until item 21's ACME
+lands. The signed-in client may already own that row, in which case only
+the manual activation below is needed. Otherwise create the Supabase
+Auth user, bind ownership, and on a fresh pilot database:
 
 ```sql
 INSERT INTO public.tenants

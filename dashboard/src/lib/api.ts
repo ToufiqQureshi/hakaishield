@@ -75,16 +75,38 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ---- Domains ----
 
+// A pending domain carries the DNS record the owner must publish to
+// prove control of it. It is absent once the domain is verified.
+export interface DomainVerification {
+  recordType: string;
+  recordName: string;
+  recordValue: string;
+}
+
 export interface Domain {
   id: string;
   domain: string;
   origin: string;
   name: string;
   status: string;
+  verification?: DomainVerification;
 }
 
 export async function listDomains() {
   return request<Domain[]>('/domains');
+}
+
+export async function createDomain(domain: string, origin: string) {
+  return request<Domain>('/domains', {
+    method: 'POST',
+    body: JSON.stringify({ domain, origin }),
+  });
+}
+
+// verifyDomain publishes nothing itself; it asks the backend to check the
+// TXT record the owner added and to record the verdict.
+export async function verifyDomain(id: string) {
+  return request<string | null>(`/domains/${encodeURIComponent(id)}/verify`, { method: 'POST' });
 }
 
 export interface PolicyDocument {

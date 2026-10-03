@@ -67,6 +67,33 @@ func TestTrailTimestamp(t *testing.T) {
 	}
 }
 
+func TestTrailLoadSeedsHistoryNewestFirst(t *testing.T) {
+	tr := evidence.NewTrail()
+	older := time.Now().Add(-time.Minute)
+	newer := time.Now()
+	tr.Load([]evidence.Evidence{{JA4: "new", Time: newer}, {JA4: "old", Time: older}})
+
+	got := tr.Recent(0)
+	if len(got) != 2 {
+		t.Fatalf("want 2 loaded records, got %d", len(got))
+	}
+	if got[0].JA4 != "new" || got[1].JA4 != "old" {
+		t.Fatalf("load order wrong: %s then %s", got[0].JA4, got[1].JA4)
+	}
+	if !got[1].Time.Equal(older) {
+		t.Fatalf("Load restamped a stored time: %v, want %v", got[1].Time, older)
+	}
+}
+
+func TestTrailLoadEmptyIsNoOp(t *testing.T) {
+	tr := evidence.NewTrail()
+	tr.Record(evidence.Evidence{JA4: "live"})
+	tr.Load(nil)
+	if got := tr.Recent(0); len(got) != 1 || got[0].JA4 != "live" {
+		t.Fatalf("empty Load changed the trail: %+v", got)
+	}
+}
+
 func TestTrailConcurrentRecords(t *testing.T) {
 	tr := evidence.NewTrail()
 	done := make(chan struct{})

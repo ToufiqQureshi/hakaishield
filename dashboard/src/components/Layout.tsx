@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -22,6 +22,10 @@ export interface LayoutContext {
   domains: Domain[];
   selectedDomain: Domain | null;
   domainsLoading: boolean;
+  // refreshDomains re-reads the account's domains after the Domains page
+  // adds or verifies one, so the shared domain list and switcher stay in
+  // sync without a full page reload.
+  refreshDomains: () => Promise<void>;
 }
 
 export default function Layout() {
@@ -34,26 +38,33 @@ export default function Layout() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
+  const loadDomains = useCallback(async () => {
+    try {
+      const d = await listDomains();
+      setDomains(d);
+      setSelectedDomain((previous) => {
+        const previousStillActive = previous && d.some((domain) => domain.id === previous.id && domainState(domain.status).protected);
+        if (previousStillActive) return previous;
+        return d.find((domain) => domainState(domain.status).protected) ?? null;
+      });
+    } catch {
+      // Domain load failure isn't fatal to the rest of the dashboard
+      // shell — pages that need a domain handle an empty selection
+      // themselves rather than this component blocking the whole layout
+      // on one failed request.
+    } finally {
+      setDomainsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    listDomains()
-      .then((d) => {
-        if (cancelled) return;
-        setDomains(d);
-        setSelectedDomain(d.find((domain) => domainState(domain.status).protected) ?? null);
-      })
-      .catch(() => {
-        // Domain load failure isn't fatal to the rest of the
-        // dashboard shell — pages that need a domain handle an
-        // empty selection themselves rather than this component
-        // blocking the whole layout on one failed request.
-      })
-      .finally(() => !cancelled && setDomainsLoading(false));
+    loadDomains();
     supabase.auth.getUser().then(({ data }) => !cancelled && setUser(data.user)).catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadDomains]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -177,7 +188,7 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-4 py-6">
-        <Outlet context={{ domains, selectedDomain, domainsLoading } satisfies LayoutContext} />
+        <Outlet context={{ domains, selectedDomain, domainsLoading, refreshDomains: loadDomains } satisfies LayoutContext} />
       </main>
     </div>
   );

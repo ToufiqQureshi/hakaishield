@@ -35,9 +35,9 @@ users never break, and it runs for months without babysitting.
 | Challenge | Signed PoW + canvas, difficulty 1–3, replay-safe | Telemetry forgeable |
 | Deception (11a) | Decoy HTML + honeypot link | Opt-in; no FP tracking |
 | Good bots | Reverse+forward DNS for 6 search engines | No AI-agent policy yet |
-| Tenants | Host routing, tenant-scoped Redis keys and APIs | Onboarding is manual |
+| Tenants | Host routing, tenant-scoped keys/APIs; self-serve domain add + DNS-TXT ownership proof | Verified domains still need operator TLS/DNS cutover (no ACME) |
 | Policy | Versioned, preview, rollback, route labels | Old rules pages shadow-only |
-| Evidence | Per-request reasons, 1000-entry ring, 24h | In memory; lost on restart |
+| Evidence | Per-request reasons; 1000-entry ring serves reads; optional durable write-behind (`-durable-evidence`) + restart hydration | Durable writes are opt-in; the in-memory ring is still node-local |
 | Metering | Per-tenant egress bytes, challenge solve/fail counts | No caps or billing |
 | Learned model | Pure-Go logistic model, shadow only, v2 provenance | No verified labels |
 | Dashboard | Supabase Auth, stats, evidence, offenders, route labels | Small test coverage |
@@ -77,10 +77,12 @@ still passes. Scoring them needs pilot FP data; the moat is item 19.
 ## Next, in order (roadmap item numbers kept for code references)
 
 **Product (needed before anyone pays):**
-- 21 Domain ownership proof + automatic ACME certificates
+- 21 Domain ownership proof **built** (DNS TXT, self-serve); automatic
+  ACME certificates still open — an operator completes TLS and cutover
+  before a verified domain is activated
 - 22 Usage metering + bandwidth caps per plan
 - 23 Billing (Stripe) + self-serve signup
-- Durable evidence and shadow stats; multi-node replay/failover
+- Durable evidence **built, opt-in** (`-durable-evidence`, Postgres write-behind with restart hydration); durable shadow stats and multi-node replay/failover still open
 
 **Detection (add only when labelled traffic shows the gap):**
 - 7 Behavioural signals: opt-in beacon **built, shadow only** (09-29).

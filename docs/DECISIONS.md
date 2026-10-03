@@ -15,11 +15,27 @@ New entry format: `- **Choice** — why. Rejected: … (date)`
 - **MVP scope: naive-to-intermediate bots.** Residential proxy networks
   are fought by fingerprint and aggregate rate, not IP; the goal is
   raising attacker cost, not 100%. (09-14)
-- **Managed pilot: one operator-provisioned domain**, self-serve domain
-  creation off until ownership proof + auto TLS exist. (09-24)
+- **Self-serve domain registration with DNS-TXT ownership proof** — a
+  signed-in account reserves a host and proves control itself; the token
+  is cleared once verified. Supersedes "self-serve creation off". (10-03)
+- **Verified ≠ protected**: ownership proof only unlocks operator setup.
+  No ACME yet, so TLS/DNS cutover and activation stay manual. (10-03)
+- **Managed pilot: one operator-provisioned domain** (superseded by the
+  above for registration; activation is still operator-led). (09-24)
 - **No DNSBL/IP reputation for the pilot** — cost, false positives on
   shared IPs. Revisit only if labelled misses show a gap. (09-24)
 - **Removed fake billing UI** instead of leaving it as a known gap. (09-21)
+
+## Platform
+
+- **Durable evidence is write-behind and opt-in** (`-durable-evidence`) —
+  reads stay on the in-memory ring, Record queues a copy to a bounded
+  buffer, a goroutine batches into Postgres. A full queue drops and counts
+  rather than blocking a visitor. Rejected: a synchronous per-request
+  write (adds DB latency and cost to the request path). (10-03)
+- **Evidence rows store the whole record as JSONB**, with only tenant/at
+  indexed; nothing durable is read on the request path, and restart
+  hydration replays the last 24h into the ring. (10-03)
 
 ## Detection
 

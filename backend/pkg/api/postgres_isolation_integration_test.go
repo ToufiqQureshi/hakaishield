@@ -177,7 +177,8 @@ CREATE TABLE tenants (
 	owner_user_id VARCHAR(255),
 	name VARCHAR(255),
 	status VARCHAR(50) NOT NULL DEFAULT 'active',
-	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	verification_token VARCHAR(64)
 );
 CREATE TABLE mitigation_rules (
 	id VARCHAR(255) PRIMARY KEY,

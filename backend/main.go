@@ -144,12 +144,17 @@ func main() {
 	dbURL := flag.String("db-url", os.Getenv("DATABASE_URL"), "PostgreSQL URL for the Supabase project's database (Project Settings > Database in the Supabase dashboard). Falls back to $DATABASE_URL (including from a local .env file) if unset.")
 	collectLabels := flag.Bool("collect-labels", false, "collect candidate observations from solved challenges and honeypot hits. Requires -db-url. Off by default; see docs/ARCHITECTURE.md.")
 	sampleRetentionDays := flag.Int("sample-retention-days", 30, "delete training samples older than this many days, 1-365; background cleanup requires -db-url")
+	durableEvidence := flag.Bool("durable-evidence", false, "persist the evidence trail to -db-url so it survives a restart. Off by default: it adds a database write per decision (batched off the request path).")
+	evidenceRetentionDays := flag.Int("evidence-retention-days", 30, "delete durable evidence records older than this many days, 1-365; used only with -durable-evidence")
 	asnDBPath := flag.String("asn-db", "", "ip2asn TSV (optionally .gz) from iptoasn.com; enables the evidence-only datacenter_ip signal. Unset leaves it off.")
 	modelPath := flag.String("model", "", "trained decision model (pkg/decide) to score alongside the rules in shadow; it never affects a decision. Unset leaves it off.")
 	supabaseURL := flag.String("supabase-url", os.Getenv("SUPABASE_URL"), "Supabase project URL (e.g. https://xxxx.supabase.co); used to verify dashboard session JWTs against the project's published JWKS. Required, with -db-url, to enable the domains/rules/settings API. Falls back to $SUPABASE_URL (including from a local .env file) if unset.")
 	flag.Parse()
 	if *sampleRetentionDays < 1 || *sampleRetentionDays > 365 {
 		log.Fatal("hakaishield: -sample-retention-days must be between 1 and 365")
+	}
+	if *evidenceRetentionDays < 1 || *evidenceRetentionDays > 365 {
+		log.Fatal("hakaishield: -evidence-retention-days must be between 1 and 365")
 	}
 
 	mode, err := config.ParseMode(*modeFlag)
@@ -228,6 +233,18 @@ func main() {
 	}
 
 	store := tenant.NewStore()
+	// Durable evidence is opt-in and additive: reads keep coming from the
+	// in-memory ring, and Record queues a copy to Postgres without blocking
+	// the request. A database is required, so an unset -db-url leaves it off.
+	var evidenceWriter *evidence.Writer
+	if *durableEvidence {
+		if *dbURL == "" {
+			log.Fatal("hakaishield: -durable-evidence needs -db-url: there is nowhere durable to write")
+		}
+		evidenceWriter = evidence.NewWriter(db.EvidenceStore{}, evidence.WriterOptions{})
+		store.EvidenceWriter = evidenceWriter
+		store.EvidenceSink = db.EvidenceStore{}
+	}
 	challengeHandler.SetOutcomeRecorder(func(host string, solved bool) {
 		// The verify route is unauthenticated; like the shadow recorder,
 		// only an already-loaded cached tenant is charged, so a forged
@@ -397,6 +414,7 @@ func main() {
 		// directly (see dashboard/src/lib/supabaseClient.ts). This
 		// backend only verifies the JWT Supabase already issued.
 		mux.HandleFunc("/api/v1/domains", api.DomainsHandler(verifier))
+		mux.HandleFunc("/api/v1/domains/{id}/verify", api.DomainVerifyHandler(verifier))
 		mux.Handle("/api/v1/dashboard/stats", api.DashboardStatsHandler(store, verifier))
 		mux.HandleFunc("/api/v1/rules", api.RulesListHandler(rulesStore, verifier))
 		mux.HandleFunc("/api/v1/rules/custom", api.CreateRuleHandler(rulesStore, verifier))
@@ -452,6 +470,14 @@ func main() {
 	defer stop()
 	if *dbURL != "" {
 		go runSampleRetention(ctx, *sampleRetentionDays)
+	}
+	if evidenceWriter != nil {
+		go evidenceWriter.Run(ctx)
+		hydrateCtx, cancelHydrate := context.WithTimeout(ctx, 5*time.Second)
+		store.HydrateEvidence(hydrateCtx)
+		cancelHydrate()
+		go runEvidenceRetention(ctx, *evidenceRetentionDays)
+		log.Printf("hakaishield: durable evidence enabled (batched write-behind; the in-memory ring still serves reads)")
 	}
 
 	go func() {

@@ -14,7 +14,7 @@ Whether you're fighting credential stuffing, scalpers, aggressive scrapers, or A
 - **Scoring Engine:** Produces an explainable allow, challenge, rate-limit, deceive or block decision.
 - **Shadow Mode Testing:** Records proposed decisions while forwarding visitor traffic to the origin.
 - **Evidence-Based Decisions:** Authenticated stats and evidence endpoints show which signals contributed to a decision.
-- **Managed Pilot:** One operator-provisioned domain and server; automatic CNAME onboarding and multi-region availability are future work.
+- **Self-serve domain registration:** Signed-in customers add a domain and prove ownership with a `_hakaishield.<domain>` DNS TXT record; an operator completes TLS/DNS cutover and activates it. Automatic ACME onboarding and multi-region availability are future work.
 
 > **Deploying it?** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — hakaishield
 > terminates TLS itself to read the ClientHello, so any platform that
@@ -88,6 +88,8 @@ cd backend && go build -o hakaishield .
 | `-evidence-token` | Bearer token for the per-request evidence endpoint. Leave it unset and that endpoint does not exist at all. |
 | `-mode` | `enforce` (default) acts on scores. `shadow` scores and records everything but blocks nothing — see below. Any other value refuses to start. |
 | `-collect-labels` | Collect candidate labels from solved challenges and honeypot hits for later review. Needs `-db-url`. Records only which checks fired — no IP, user agent, path or body. Off by default. |
+| `-durable-evidence` | Persist the evidence trail to `-db-url` so it survives a restart. Off by default: it adds a batched (off the request path) database write per decision. Reads still come from the in-memory ring, which is hydrated on startup. Needs `-db-url`. |
+| `-evidence-retention-days` | Delete durable evidence older than this many days, 1–365. Used only with `-durable-evidence`. |
 | `-model` | A trained decision model (see below) to score alongside the rules. It records what it would have decided and never affects a decision. Unset leaves it off. A model that does not match this build's checks refuses to start. |
 | `-db-url` | PostgreSQL URL for your Supabase project's database (Project Settings → Database in the Supabase dashboard). Required, along with `-supabase-url`, for the dashboard's domains/rules/settings API. |
 | `-supabase-url` | Your Supabase project URL (e.g. `https://xxxx.supabase.co`). Used to verify dashboard session JWTs against that project's published JWKS — no shared secret needed. Required, along with `-db-url`, for that same API. |

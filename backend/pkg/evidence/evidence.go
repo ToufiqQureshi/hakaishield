@@ -84,9 +84,10 @@ type ModelReason struct {
 }
 
 // Trail holds the most recent decisions in a fixed-size ring buffer,
-// oldest overwritten first. In-memory only, so it resets on restart —
-// same limitation as stats.Stats, and durable history needs the planned
-// store (docs/STATUS.md).
+// oldest overwritten first. Reads always come from memory; when a Writer
+// is attached the same records are also queued to a durable Sink, and
+// Load seeds the buffer from it at startup so a restart does not empty
+// the history a customer can see.
 type Trail struct {
 	mu     sync.Mutex
 	buf    []Evidence
@@ -94,6 +95,9 @@ type Trail struct {
 	n      int
 	maxAge time.Duration
 	now    func() time.Time
+
+	writer   *Writer
+	tenantID string
 }
 
 func NewTrail() *Trail {
@@ -110,8 +114,22 @@ func newTrail(size int, maxAge time.Duration) *Trail {
 	return &Trail{buf: make([]Evidence, size), maxAge: maxAge, now: time.Now}
 }
 
+// EnablePersistence attaches a durable Writer to this tenant's trail.
+// It must be called before the tenant serves traffic.
+func (t *Trail) EnablePersistence(tenantID string, w *Writer) {
+	if t == nil || w == nil {
+		return
+	}
+	t.mu.Lock()
+	t.tenantID = tenantID
+	t.writer = w
+	t.mu.Unlock()
+}
+
 // Record stamps a decision with the time it happened and stores it,
-// dropping the oldest record once the buffer is full.
+// dropping the oldest record once the buffer is full. When a Writer is
+// attached the record is also queued for durable storage, without
+// blocking on the database.
 func (t *Trail) Record(e Evidence) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -122,6 +140,34 @@ func (t *Trail) Record(e Evidence) {
 	t.next = (t.next + 1) % len(t.buf)
 	if t.n < len(t.buf) {
 		t.n++
+	}
+	if t.writer != nil {
+		t.writer.enqueue(t.tenantID, e)
+	}
+}
+
+// Load seeds the ring from durable storage, oldest record first, so a
+// freshly started process shows the same history as before it restarted.
+// It is meant to run once, before the tenant serves traffic; it does not
+// restamp times or queue what it loads back to the store.
+func (t *Trail) Load(records []Evidence) {
+	if t == nil || len(records) == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.buf = make([]Evidence, len(t.buf))
+	t.next, t.n = 0, 0
+	// Callers pass newest first, so insert from the back to keep the ring
+	// in chronological order.
+	for i := len(records) - 1; i >= 0; i-- {
+		e := cloneEvidence(records[i])
+		t.buf[t.next] = e
+		t.next = (t.next + 1) % len(t.buf)
+		if t.n < len(t.buf) {
+			t.n++
+		}
 	}
 }
 

@@ -16,8 +16,15 @@ export function domainState(status: string): DomainState {
   }
   if (status === 'pending_verification') {
     return {
-      label: 'Setup pending',
-      detail: 'This domain is not routing through HakaiShield yet.',
+      label: 'Verify ownership',
+      detail: 'This domain is not routing through HakaiShield yet. Add the DNS TXT record, then verify.',
+      protected: false,
+    };
+  }
+  if (status === 'verified') {
+    return {
+      label: 'Ownership verified',
+      detail: 'Ownership is proven, but traffic is not routing through HakaiShield until setup completes.',
       protected: false,
     };
   }

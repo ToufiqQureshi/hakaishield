@@ -24,6 +24,11 @@ type Domain struct {
 	Name      string
 	Status    string
 	CreatedAt time.Time
+	// VerificationToken is the secret a new domain's owner must publish in
+	// DNS to prove they control it. It is non-empty only while the domain
+	// is awaiting verification, and must never be exposed for an active or
+	// verified domain.
+	VerificationToken string
 }
 
 var DB *pgxpool.Pool
@@ -63,6 +68,7 @@ func InitSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS name VARCHAR(255);
 	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'active';
 	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+	ALTER TABLE tenants ADD COLUMN IF NOT EXISTS verification_token VARCHAR(64);
 	CREATE INDEX IF NOT EXISTS idx_tenants_owner ON tenants(owner_user_id);
 
 	CREATE TABLE IF NOT EXISTS users (
@@ -124,6 +130,19 @@ func InitSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		honeypot_enabled BOOLEAN NOT NULL DEFAULT true,
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	);
+
+	-- Durable per-request decisions, so a restart does not erase the
+	-- history a customer can see. The whole Evidence record is stored as
+	-- JSONB and only the query columns are indexed; nothing here is read
+	-- on the request path.
+	CREATE TABLE IF NOT EXISTS evidence_records (
+		id BIGSERIAL PRIMARY KEY,
+		tenant_id VARCHAR(255) NOT NULL,
+		at TIMESTAMPTZ NOT NULL,
+		record JSONB NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_evidence_tenant_at ON evidence_records(tenant_id, at DESC);
+	CREATE INDEX IF NOT EXISTS idx_evidence_retention ON evidence_records(at, id);
 	`
 	_, err := pool.Exec(ctx, schema)
 	return err
@@ -159,7 +178,7 @@ func ListDomains(ctx context.Context, ownerUserID string) ([]Domain, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
-	const q = `SELECT id, host, target, COALESCE(name, host), status, created_at
+	const q = `SELECT id, host, target, COALESCE(name, host), status, created_at, COALESCE(verification_token, '')
 		FROM tenants WHERE owner_user_id = $1 ORDER BY created_at DESC`
 	rows, err := DB.Query(ctx, q, ownerUserID)
 	if err != nil {
@@ -170,7 +189,7 @@ func ListDomains(ctx context.Context, ownerUserID string) ([]Domain, error) {
 	out := []Domain{}
 	for rows.Next() {
 		var d Domain
-		if err := rows.Scan(&d.ID, &d.Host, &d.Target, &d.Name, &d.Status, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.Host, &d.Target, &d.Name, &d.Status, &d.CreatedAt, &d.VerificationToken); err != nil {
 			return nil, fmt.Errorf("scanning domain row: %w", err)
 		}
 		out = append(out, d)
