@@ -368,3 +368,10 @@ visitor. `HAKAISHIELD_ORIGIN_HOST_FROM_TARGET=true` is required here.
 Gotcha: `/opt/hakaishield` is a copied tree, not a git checkout; the deployed
 commit is in `/opt/hakaishield/DEPLOYED_COMMIT`. No Elastic IP yet — a
 stop/start changes the IP and breaks DNS.
+
+### 2026-10-03 — domain onboarding + durable evidence
+`be0fa7f` — self-serve domain add with DNS-TXT ownership proof (activation
+still operator-led, no ACME); opt-in Postgres write-behind evidence
+(`-durable-evidence`) with 24h restart hydration into the ring.
+Gotcha: a full evidence queue drops and counts, never blocks — watch the
+drop counter before trusting durable history as complete.
