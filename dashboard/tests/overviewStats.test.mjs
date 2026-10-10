@@ -29,6 +29,9 @@ function loadModule() {
     if (name.includes('lib/api')) {
       return { getStats: async () => ({}), getTopOffenders: async () => [], ApiError: class ApiError extends Error {} };
     }
+    if (name.includes('lib/trafficSample')) {
+      return { trafficSample: () => [] };
+    }
     return require_(name);
   };
   new Function('require', 'module', 'exports', code)(req, mod, mod.exports);

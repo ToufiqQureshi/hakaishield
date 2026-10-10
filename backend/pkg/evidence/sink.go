@@ -30,6 +30,7 @@ const (
 	defaultQueueSize     = 4096
 	defaultBatchSize     = 200
 	defaultFlushInterval = time.Second
+	writeTimeout         = 5 * time.Second
 )
 
 // Writer makes evidence durable without putting a database call in the
@@ -89,24 +90,48 @@ func (w *Writer) Run(ctx context.Context) {
 
 	pending := make([]queued, 0, w.opts.BatchSize)
 	for {
+		if ctx.Err() != nil {
+			w.flushOnShutdown(pending)
+			return
+		}
 		select {
 		case <-ctx.Done():
-			pending = w.drain(pending)
-			w.write(ctx, pending)
+			w.flushOnShutdown(pending)
 			return
 		case q := <-w.ch:
 			pending = append(pending, q)
+			if ctx.Err() != nil {
+				w.flushOnShutdown(pending)
+				return
+			}
 			if len(pending) >= w.opts.BatchSize {
-				w.write(ctx, pending)
+				w.writeWithTimeout(pending)
 				pending = pending[:0]
 			}
 		case <-ticker.C:
+			if ctx.Err() != nil {
+				w.flushOnShutdown(pending)
+				return
+			}
 			if len(pending) > 0 {
-				w.write(ctx, pending)
+				w.writeWithTimeout(pending)
 				pending = pending[:0]
 			}
 		}
 	}
+}
+
+func (w *Writer) flushOnShutdown(pending []queued) {
+	pending = w.drain(pending)
+	w.writeWithTimeout(pending)
+}
+
+func (w *Writer) writeWithTimeout(pending []queued) {
+	// A write must be bounded, while a cancelled run context must not make
+	// a healthy database reject the final batch during graceful shutdown.
+	writeCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+	defer cancel()
+	w.write(writeCtx, pending)
 }
 
 // drain moves everything currently buffered into pending, up to the point

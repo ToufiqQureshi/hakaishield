@@ -18,7 +18,7 @@ One Linux server near the protected origin; size and price are chosen when
 the pilot domain and traffic estimate are known. Keep the ORIGIN nearby to
 avoid an extra long network hop (see "Where" in docs/DEPLOYMENT.md).
 ├── hakaishield   :443, in Docker
-└── Redis         no published port; only hakaishield reaches it
+└── Redis         Upstash TCP over TLS; no local Redis container
 
 Supabase        Postgres. Managed backups, and a dead box does not
                 take the customer data with it.
@@ -26,9 +26,10 @@ Vercel / Pages  the dashboard. Static files, free, not in the request
                 path — so TLS termination there does not matter.
 ```
 
-Do not self-host Postgres on the same box. Redis also holds spent challenge
-nonces, so Compose uses a persistent AOF volume and `noeviction`. Back up and
-monitor that volume; see `../docs/DEPLOYMENT.md` for outage limits.
+Do not self-host Postgres on the same box. Production Redis uses Upstash TCP
+over TLS: set `REDIS_URL` in `deploy/.env`. Redis holds spent challenge
+nonces, so monitor availability and persistence;
+see `../docs/DEPLOYMENT.md` for outage limits.
 
 ---
 
@@ -58,8 +59,8 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml logs -f
 ```
 
-Set `DATABASE_URL` and `SUPABASE_URL` as well: the client dashboard API is part
-of this pilot and Compose fails if either is missing. After TLS/origin checks,
+Set `DATABASE_URL`, `SUPABASE_URL`, and `REDIS_URL` as well: the client dashboard API is part
+of this pilot and Compose fails if any is missing. After TLS/origin checks,
 bind the client's Supabase Auth ID to the default tenant using the exact SQL in
 [`../docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md).
 Set `HAKAISHIELD_DASHBOARD_ORIGIN` to the exact HTTPS origin serving the static

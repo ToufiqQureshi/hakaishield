@@ -44,8 +44,8 @@ own rate.
 **Rule: the origin must sit in the same region as the proxy.** Otherwise
 the visitor pays the distance three times, not once.
 
-Setup: 2 vCPU / 4 GB droplet, Ubuntu LTS. Redis in Docker on the box
-(no public port). Postgres on Supabase. Certbot with renewal hook.
+Setup: 2 vCPU / 4 GB droplet, Ubuntu LTS. Redis on Upstash over TLS.
+Postgres on Supabase. Certbot with renewal hook.
 Firewall: 443, 80 (renewal), 22 (your IP only). No LB, no CDN in front.
 
 Moving providers is an afternoon: new box, DNS, `setup.sh`.
@@ -88,6 +88,11 @@ safe to leave off until a client needs history that survives a restart.
    while you attack your own site, or the model learns your test bots.
 4. Check: JA4 varies by client, Host routing, real browser journeys,
    health, Redis, evidence auth, restart, `certbot renew --dry-run`.
+   The Compose backend healthcheck calls its private loopback
+   `127.0.0.1:9090/ready` listener. It reports ready only while both
+   Postgres and Redis respond; check `docker compose ps` and investigate
+   unhealthy containers before sending customer traffic. Do not publish
+   port 9090 or bind `-health-addr` to a public interface.
 5. Run `bot-testing/ladder/ladder.py` only against your own site.
 6. Enforce only after a reviewed shadow sample and client sign-off.
    Keep the previous image and mode ready for rollback.
@@ -119,5 +124,5 @@ overwrite. Restart the proxy afterwards; it checks the row matches
 
 - One node only: evidence and shadow stats are in memory; Redis outage
   falls back to per-node nonces (cross-node replay not prevented).
-- Redis AOF `everysec` can lose the last second of nonces on a crash.
+- Upstash Redis availability and latency must be validated from the deployed edge region.
 - Nothing here has run against live traffic yet.

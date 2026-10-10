@@ -14,11 +14,15 @@ export default function RequireAuth() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled) setStatus(data.session ? 'signed-in' : 'signed-out');
-    });
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (!cancelled) setStatus(!error && data.session ? 'signed-in' : 'signed-out');
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('signed-out');
+      });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setStatus(session ? 'signed-in' : 'signed-out');
+      if (!cancelled) setStatus(session ? 'signed-in' : 'signed-out');
     });
     return () => {
       cancelled = true;

@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/ToufiqQureshi/hakaishield/pkg/auth"
+	"github.com/ToufiqQureshi/hakaishield/pkg/core"
 	"github.com/ToufiqQureshi/hakaishield/pkg/db"
 )
 
@@ -21,12 +23,17 @@ var (
 	createDomain                 = db.CreateDomain
 	getOwnedDomain               = db.GetOwnedDomain
 	markDomainVerified           = db.MarkDomainVerified
+	markDomainActive             = db.MarkDomainActive
 	dashboardOwnershipConfigured = func() bool { return db.DB != nil }
 	// lookupDomainTXT is the ownership check's only network call. It is
 	// injected so a test never has to reach the public DNS.
 	lookupDomainTXT = func(ctx context.Context, name string) ([]string, error) {
 		return net.DefaultResolver.LookupTXT(ctx, name)
 	}
+	lookupDomainIPs = func(ctx context.Context, name string) ([]net.IP, error) {
+		return net.DefaultResolver.LookupIP(ctx, "ip", name)
+	}
+	probeDomainOrigin = core.ProbePublicOrigin
 )
 
 // dnsLookupTimeout bounds the DNS query made when a customer clicks
@@ -54,6 +61,16 @@ func domainJSON(d db.Domain) map[string]any {
 			"recordType":  "TXT",
 			"recordName":  verificationRecordName(d.Host),
 			"recordValue": verificationRecordValue(d.VerificationToken),
+		}
+	}
+	// After ownership verification, give the customer the exact DNS cutover
+	// record. An unconfigured edge must never be presented as activatable.
+	if d.Status == db.StatusVerified {
+		address := strings.TrimSpace(os.Getenv("HAKAISHIELD_EDGE_IPV4"))
+		if core.PublicEdgeIPv4(address) {
+			out["edge"] = map[string]string{
+				"recordType": "A", "recordName": d.Host, "recordValue": address,
+			}
 		}
 	}
 	return out
@@ -92,6 +109,10 @@ func DomainsHandler(verifier *auth.Verifier) http.HandlerFunc {
 			origin, ok := validOrigin(req.Origin)
 			if !ok {
 				writeError(w, http.StatusBadRequest, "enter a valid origin, such as https://origin.example")
+				return
+			}
+			if originUsesProtectedHost(origin, host) {
+				writeError(w, http.StatusBadRequest, "origin must use a separate hostname or public IP so DNS cutover cannot route traffic back to HakaiShield")
 				return
 			}
 
@@ -178,6 +199,74 @@ func DomainVerifyHandler(verifier *auth.Verifier) http.HandlerFunc {
 	})
 }
 
+// DomainActivateHandler provisions a verified tenant end to end: it checks
+// the configured origin, obtains a host-restricted ACME certificate, then
+// atomically enables visitor routing. Failed steps leave the tenant verified.
+func DomainActivateHandler(verifier *auth.Verifier, issueCertificate func(context.Context, string) error) http.HandlerFunc {
+	return RequireAuth(verifier, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		owner, id := UserIDFromContext(r.Context()), r.PathValue("id")
+		d, err := getOwnedDomain(r.Context(), owner, id)
+		if errors.Is(err, db.ErrDomainNotFound) {
+			writeError(w, http.StatusNotFound, "domain not found")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load domain")
+			return
+		}
+		if d.Status == db.StatusActive {
+			writeMessage(w, http.StatusOK, "domain is already protected")
+			return
+		}
+		if d.Status != db.StatusVerified {
+			writeError(w, http.StatusConflict, "verify domain ownership before enabling protection")
+			return
+		}
+		// Existing rows may predate the create-time check. Never activate a
+		// route that will call itself after the customer's DNS cutover.
+		if originUsesProtectedHost(d.Target, d.Host) {
+			writeError(w, http.StatusConflict, "origin uses the protected hostname; configure a separate origin before enabling protection")
+			return
+		}
+		if issueCertificate == nil {
+			writeError(w, http.StatusServiceUnavailable, "automatic TLS is not configured")
+			return
+		}
+		edgeIP := strings.TrimSpace(os.Getenv("HAKAISHIELD_EDGE_IPV4"))
+		if !core.PublicEdgeIPv4(edgeIP) {
+			writeError(w, http.StatusServiceUnavailable, "public edge address is not configured")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
+		defer cancel()
+		if err := checkDomainEdgeDNS(ctx, d.Host, edgeIP); err != nil {
+			writeError(w, http.StatusConflict, "public DNS does not point only to the HakaiShield edge yet; update this hostname's A record, remove conflicting A/AAAA records, and retry")
+			return
+		}
+		if err := probeDomainOrigin(ctx, d.Target, d.Host); err != nil {
+			writeError(w, http.StatusBadGateway, "origin check failed; confirm the origin is publicly reachable and try again")
+			return
+		}
+		if err := issueCertificate(ctx, d.Host); err != nil {
+			writeError(w, http.StatusBadGateway, "TLS certificate could not be issued; confirm this hostname points to HakaiShield and try again")
+			return
+		}
+		if err := markDomainActive(ctx, owner, id); err != nil {
+			if errors.Is(err, db.ErrDomainNotFound) {
+				writeError(w, http.StatusConflict, "domain setup changed; refresh and try again")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "could not enable protection")
+			return
+		}
+		writeMessage(w, http.StatusOK, "domain protection enabled")
+	})
+}
+
 func verificationRecordName(host string) string {
 	return "_hakaishield." + host
 }
@@ -241,4 +330,25 @@ func validOrigin(raw string) (string, bool) {
 		return "", false
 	}
 	return raw, true
+}
+
+func originUsesProtectedHost(origin, protectedHost string) bool {
+	u, err := url.Parse(origin)
+	return err == nil && strings.EqualFold(strings.TrimSuffix(u.Hostname(), "."), strings.TrimSuffix(protectedHost, "."))
+}
+
+// Every public address must reach this edge. A leftover AAAA or A record
+// could split visitors between protected and unprotected servers after setup.
+func checkDomainEdgeDNS(ctx context.Context, host, edgeIPv4 string) error {
+	addresses, err := lookupDomainIPs(ctx, host)
+	if err != nil || len(addresses) == 0 {
+		return errors.New("domain has no usable public address")
+	}
+	want := net.ParseIP(edgeIPv4)
+	for _, ip := range addresses {
+		if !ip.Equal(want) {
+			return fmt.Errorf("domain resolves to %s instead of %s", ip, edgeIPv4)
+		}
+	}
+	return nil
 }

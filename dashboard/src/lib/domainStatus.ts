@@ -28,9 +28,16 @@ export function domainState(status: string): DomainState {
       protected: false,
     };
   }
+  if (status === 'expired') {
+    return {
+      label: 'Verification expired',
+      detail: 'The domain was not verified within seven days. Add it again to get a new DNS TXT record.',
+      protected: false,
+    };
+  }
   return {
     label: 'Setup needs review',
-    detail: 'Protection is not confirmed. Contact the pilot operator.',
+    detail: 'Protection is not confirmed. Contact support.',
     protected: false,
   };
 }

@@ -9,34 +9,22 @@
 #   HAKAISHIELD_CHALLENGE_SECRET=<openssl rand -hex 32>
 #   DATABASE_URL=postgres://...
 #   SUPABASE_URL=https://xxxx.supabase.co
+#   REDIS_URL=rediss://default:<password>@<endpoint>:<port>
 
 services:
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    # No published ports at all. Redis has no password by default, and an
-    # internet-reachable Redis is found and taken over within hours. Only
-    # the hakaishield container needs it, and it reaches it over the
-    # compose network by name.
-    # Challenge nonce keys must survive until their TTL. Eviction could reopen
-    # replay across nodes, so full Redis fails writes instead of evicting them.
-    command: redis-server --save "" --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
   hakaishield:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
+    # HTTP drain (10s) and evidence flush (5s) need time before SIGKILL.
+    stop_grace_period: 25s
+    healthcheck:
+      test: ["CMD", "/hakaishield-healthcheck"]
+      interval: 10s
+      timeout: 4s
+      retries: 3
+      start_period: 20s
     ports:
       # 443 on the host, 8443 in the container: the process runs as a
       # non-root user and cannot bind a privileged port itself.
@@ -50,10 +38,18 @@ services:
       # Optional ip2asn table for the evidence-only datacenter_ip signal.
       # See deploy/RUNBOOK.md; an empty directory leaves the signal off.
       - /etc/hakaishield/asn:/run/hakaishield/asn:ro
+      # ACME certificates and account state must survive container restarts.
+      - acme-certs:/var/lib/hakaishield/acme
     environment:
       HAKAISHIELD_CHALLENGE_SECRET: ${HAKAISHIELD_CHALLENGE_SECRET:?Set a stable random challenge secret}
       EVIDENCE_TOKEN: ${EVIDENCE_TOKEN:?Set a random evidence token}
       HAKAISHIELD_DASHBOARD_ORIGIN: ${HAKAISHIELD_DASHBOARD_ORIGIN:?Set the dashboard HTTPS origin}
+      DATABASE_URL: ${DATABASE_URL:?Set the PostgreSQL connection URL}
+      SUPABASE_URL: ${SUPABASE_URL:?Set the Supabase project URL}
+      REDIS_URL: ${REDIS_URL:?Set the Upstash TCP rediss URL}
+      HAKAISHIELD_EDGE_IPV4: ${HAKAISHIELD_EDGE_IPV4:?Set the stable public edge IPv4 address}
+      ACME_CACHE_DIR: /var/lib/hakaishield/acme
+      ACME_EMAIL: ${ACME_EMAIL:?Set an operational ACME contact email}
     command:
       - "-addr=:8443"
       - "-target=${HAKAISHIELD_ORIGIN:?Set the protected origin URL}"
@@ -62,9 +58,6 @@ services:
       - "-tls-cert=/run/hakaishield/tls/fullchain.pem"
       - "-tls-key=/run/hakaishield/tls/privkey.pem"
       - "-mode=${HAKAISHIELD_MODE:-shadow}"
-      - "-redis-url=redis://redis:6379"
-      - "-db-url=${DATABASE_URL:?Set the pilot PostgreSQL connection URL}"
-      - "-supabase-url=${SUPABASE_URL:?Set the Supabase project URL for dashboard auth}"
       - "-sample-retention-days=${HAKAISHIELD_SAMPLE_RETENTION_DAYS:-30}"
       - "-asn-db=${HAKAISHIELD_ASN_DB:-}"
       # -collect-labels is deliberately absent. While you are attacking your
@@ -80,4 +73,4 @@ services:
         max-file: "5"
 
 volumes:
-  redis-data:
+  acme-certs:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,6 +111,19 @@ func TestCreateDomainReportsConflictsAndCaps(t *testing.T) {
 		if rec.Code != tc.want {
 			t.Fatalf("%s: status = %d, want %d: %s", tc.name, rec.Code, tc.want, rec.Body.String())
 		}
+	}
+}
+
+func TestCreateDomainRejectsOriginLoopBeforeReservation(t *testing.T) {
+	ia := newIsolationAuth(t)
+	called := false
+	withDomainOps(t, func(context.Context, string, string, string) (db.Domain, error) {
+		called = true
+		return db.Domain{}, nil
+	}, nil, nil, nil)
+	rec := postJSON(t, DomainsHandler(ia.verifier(t)), "/api/v1/domains", `{"domain":"shop.example.com","origin":"https://SHOP.EXAMPLE.COM:443"}`, ia.sign(t, "user-a"))
+	if rec.Code != http.StatusBadRequest || called {
+		t.Fatalf("same-host origin status=%d, reservation called=%v", rec.Code, called)
 	}
 }
 
@@ -266,6 +280,128 @@ func TestVerifyDomainRequiresAuthAndPost(t *testing.T) {
 	}
 }
 
+func TestActivateDomainOrdersChecksBeforeEnablingTenant(t *testing.T) {
+	ia := newIsolationAuth(t)
+	t.Setenv("HAKAISHIELD_EDGE_IPV4", "8.8.8.8")
+	originalGet, originalMark, originalProbe, originalLookup := getOwnedDomain, markDomainActive, probeDomainOrigin, lookupDomainIPs
+	t.Cleanup(func() {
+		getOwnedDomain, markDomainActive, probeDomainOrigin, lookupDomainIPs = originalGet, originalMark, originalProbe, originalLookup
+	})
+	getOwnedDomain = func(_ context.Context, owner, id string) (db.Domain, error) {
+		if owner != "user-a" || id != "d1" {
+			return db.Domain{}, db.ErrDomainNotFound
+		}
+		return db.Domain{ID: id, Host: "shop.example.com", Target: "https://origin.example", Status: db.StatusVerified}, nil
+	}
+	var steps []string
+	lookupDomainIPs = func(_ context.Context, host string) ([]net.IP, error) {
+		if host != "shop.example.com" {
+			t.Fatalf("DNS host=%q", host)
+		}
+		steps = append(steps, "dns")
+		return []net.IP{net.ParseIP("8.8.8.8")}, nil
+	}
+	probeDomainOrigin = func(_ context.Context, target, host string) error {
+		if target != "https://origin.example" || host != "shop.example.com" {
+			t.Fatalf("probe got %q %q", target, host)
+		}
+		steps = append(steps, "probe")
+		return nil
+	}
+	markDomainActive = func(context.Context, string, string) error { steps = append(steps, "activate"); return nil }
+	handler := DomainActivateHandler(ia.verifier(t), func(_ context.Context, host string) error {
+		if host != "shop.example.com" {
+			t.Fatalf("certificate requested for %q", host)
+		}
+		steps = append(steps, "certificate")
+		return nil
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/d1/activate", nil)
+	req.Header.Set("Authorization", "Bearer "+ia.sign(t, "user-a"))
+	req.SetPathValue("id", "d1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("activate status=%d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Join(steps, ",") != "dns,probe,certificate,activate" {
+		t.Fatalf("steps=%v", steps)
+	}
+}
+
+func TestActivateDomainDoesNotEnableWhenOriginProbeFails(t *testing.T) {
+	ia := newIsolationAuth(t)
+	t.Setenv("HAKAISHIELD_EDGE_IPV4", "8.8.8.8")
+	originalGet, originalMark, originalProbe, originalLookup := getOwnedDomain, markDomainActive, probeDomainOrigin, lookupDomainIPs
+	t.Cleanup(func() {
+		getOwnedDomain, markDomainActive, probeDomainOrigin, lookupDomainIPs = originalGet, originalMark, originalProbe, originalLookup
+	})
+	getOwnedDomain = func(context.Context, string, string) (db.Domain, error) {
+		return db.Domain{ID: "d1", Host: "shop.example.com", Target: "https://origin.example", Status: db.StatusVerified}, nil
+	}
+	probeDomainOrigin = func(context.Context, string, string) error { return errors.New("unreachable") }
+	lookupDomainIPs = func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("8.8.8.8")}, nil }
+	certificateCalled, activated := false, false
+	markDomainActive = func(context.Context, string, string) error { activated = true; return nil }
+	handler := DomainActivateHandler(ia.verifier(t), func(context.Context, string) error { certificateCalled = true; return nil })
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/d1/activate", nil)
+	req.Header.Set("Authorization", "Bearer "+ia.sign(t, "user-a"))
+	req.SetPathValue("id", "d1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadGateway || certificateCalled || activated {
+		t.Fatalf("status=%d certificate=%v activated=%v", rec.Code, certificateCalled, activated)
+	}
+}
+
+func TestActivateDomainRejectsDNSOutsideEdge(t *testing.T) {
+	ia := newIsolationAuth(t)
+	t.Setenv("HAKAISHIELD_EDGE_IPV4", "8.8.8.8")
+	originalGet, originalMark, originalProbe, originalLookup := getOwnedDomain, markDomainActive, probeDomainOrigin, lookupDomainIPs
+	t.Cleanup(func() {
+		getOwnedDomain, markDomainActive, probeDomainOrigin, lookupDomainIPs = originalGet, originalMark, originalProbe, originalLookup
+	})
+	getOwnedDomain = func(context.Context, string, string) (db.Domain, error) {
+		return db.Domain{ID: "d1", Host: "shop.example.com", Target: "https://origin.example", Status: db.StatusVerified}, nil
+	}
+	called := false
+	probeDomainOrigin = func(context.Context, string, string) error { called = true; return nil }
+	markDomainActive = func(context.Context, string, string) error { called = true; return nil }
+	lookupDomainIPs = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("2001:4860:4860::8888")}, nil
+	}
+	handler := DomainActivateHandler(ia.verifier(t), func(context.Context, string) error { called = true; return nil })
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/d1/activate", nil)
+	req.Header.Set("Authorization", "Bearer "+ia.sign(t, "user-a"))
+	req.SetPathValue("id", "d1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict || called {
+		t.Fatalf("wrong DNS activation status=%d, downstream called=%v", rec.Code, called)
+	}
+}
+
+func TestActivateDomainRejectsExistingOriginLoop(t *testing.T) {
+	ia := newIsolationAuth(t)
+	originalGet, originalMark, originalProbe := getOwnedDomain, markDomainActive, probeDomainOrigin
+	t.Cleanup(func() { getOwnedDomain, markDomainActive, probeDomainOrigin = originalGet, originalMark, originalProbe })
+	getOwnedDomain = func(context.Context, string, string) (db.Domain, error) {
+		return db.Domain{ID: "d1", Host: "shop.example.com", Target: "https://shop.example.com", Status: db.StatusVerified}, nil
+	}
+	called := false
+	probeDomainOrigin = func(context.Context, string, string) error { called = true; return nil }
+	markDomainActive = func(context.Context, string, string) error { called = true; return nil }
+	handler := DomainActivateHandler(ia.verifier(t), func(context.Context, string) error { called = true; return nil })
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/d1/activate", nil)
+	req.Header.Set("Authorization", "Bearer "+ia.sign(t, "user-a"))
+	req.SetPathValue("id", "d1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict || called {
+		t.Fatalf("same-host activation status=%d, downstream called=%v", rec.Code, called)
+	}
+}
+
 func TestDomainJSONHidesTokenUnlessPending(t *testing.T) {
 	pending := domainJSON(db.Domain{Host: "a.example", Status: db.StatusPendingVerification, VerificationToken: "t"})
 	if _, ok := pending["verification"]; !ok {
@@ -276,6 +412,24 @@ func TestDomainJSONHidesTokenUnlessPending(t *testing.T) {
 		if _, ok := d["verification"]; ok {
 			t.Fatalf("status %q leaked a verification token", status)
 		}
+	}
+}
+
+func TestDomainJSONProvidesPublicEdgeOnlyAfterVerification(t *testing.T) {
+	t.Setenv("HAKAISHIELD_EDGE_IPV4", "8.8.8.8")
+	verified := domainJSON(db.Domain{Host: "shop.example.com", Status: db.StatusVerified})
+	edge, ok := verified["edge"].(map[string]string)
+	if !ok || edge["recordType"] != "A" || edge["recordName"] != "shop.example.com" || edge["recordValue"] != "8.8.8.8" {
+		t.Fatalf("incorrect verified edge record: %#v", verified["edge"])
+	}
+	for _, status := range []string{db.StatusPendingVerification, db.StatusActive} {
+		if _, ok := domainJSON(db.Domain{Host: "shop.example.com", Status: status})["edge"]; ok {
+			t.Fatalf("status %q exposed edge cutover record", status)
+		}
+	}
+	t.Setenv("HAKAISHIELD_EDGE_IPV4", "127.0.0.1")
+	if _, ok := domainJSON(db.Domain{Host: "shop.example.com", Status: db.StatusVerified})["edge"]; ok {
+		t.Fatal("private edge address exposed to customer")
 	}
 }
 

@@ -27,15 +27,16 @@ export default function Pricing() {
           // pricing
         </p>
         <h1 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight max-w-2xl">
-          Simple pricing.<br />No surprises.
+          Proposed plans.<br />Clear limits.
         </h1>
         <p className="text-lg max-w-xl" style={{ color: 'var(--text-secondary)' }}>
-          Every plan includes a bandwidth cap. Start with shadow mode — see what we'd block before enforcing anything.
+          These packages are being designed. Prices, features, and limits may change. Checkout and live protection are not available yet.
         </p>
       </section>
 
-      {/* Plans */}
+      {/* Proposed plans */}
       <section className="max-w-5xl mx-auto px-6 pb-20">
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Indicative monthly pricing in USD. No subscription can be purchased today.</p>
         <div className="grid md:grid-cols-3 gap-px" style={{ background: 'var(--border-primary)' }}>
           {/* Starter */}
           <div className="p-8" style={{ background: 'var(--bg-primary)' }}>
@@ -47,8 +48,8 @@ export default function Pricing() {
             <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
               For growing sites that need bot protection now.
             </p>
-            <a href="/contact" className="btn-secondary w-full py-2.5 text-sm text-center block mb-8">
-              Request a pilot
+            <a href="/sign-up" className="btn-secondary w-full py-2.5 text-sm text-center block mb-8">
+              Create account
             </a>
             <ul className="space-y-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <li>1M requests/month</li>
@@ -75,8 +76,8 @@ export default function Pricing() {
             <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
               For businesses where bots are a revenue leak.
             </p>
-            <a href="/contact" className="btn-primary w-full py-2.5 text-sm text-center block mb-8">
-              Request a pilot
+            <a href="/sign-up" className="btn-primary w-full py-2.5 text-sm text-center block mb-8">
+              Create account
             </a>
             <ul className="space-y-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <li>10M requests/month</li>
@@ -120,70 +121,6 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* Comparison */}
-      <section className="border-t" style={{ borderColor: 'var(--border-primary)' }}>
-        <div className="max-w-5xl mx-auto px-6 py-20">
-          <div className="max-w-2xl mb-12">
-            <p className="text-sm font-mono mb-4" style={{ color: 'var(--text-muted)' }}>
-              // comparison
-            </p>
-            <h2 className="text-3xl font-bold tracking-tight">
-              Why not the alternatives?
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                  <th className="text-left py-3 pr-4 font-medium" style={{ color: 'var(--text-muted)' }}></th>
-                  <th className="text-center py-3 px-4 font-semibold">hakaishield</th>
-                  <th className="text-center py-3 px-4" style={{ color: 'var(--text-muted)' }}>Enterprise</th>
-                  <th className="text-center py-3 px-4" style={{ color: 'var(--text-muted)' }}>Free / OSS</th>
-                </tr>
-              </thead>
-              <tbody style={{ color: 'var(--text-secondary)' }}>
-                <tr className="border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                  <td className="py-3 pr-4">First-request detection</td>
-                  <td className="text-center text-green-400">✓</td>
-                  <td className="text-center text-green-400">✓</td>
-                  <td className="text-center text-red-400">✕</td>
-                </tr>
-                <tr className="border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                  <td className="py-3 pr-4">Evidence trail</td>
-                  <td className="text-center text-green-400">✓</td>
-                  <td className="text-center" style={{ color: 'var(--text-muted)' }}>Partial</td>
-                  <td className="text-center text-red-400">✕</td>
-                </tr>
-                <tr className="border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                  <td className="py-3 pr-4">Shadow mode</td>
-                  <td className="text-center text-green-400">✓</td>
-                  <td className="text-center text-red-400">✕</td>
-                  <td className="text-center text-red-400">✕</td>
-                </tr>
-                <tr className="border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                  <td className="py-3 pr-4">Self-hosted option</td>
-                  <td className="text-center text-green-400">✓</td>
-                  <td className="text-center text-red-400">✕</td>
-                  <td className="text-center text-green-400">✓</td>
-                </tr>
-                <tr className="border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                  <td className="py-3 pr-4">Setup time</td>
-                  <td className="text-center font-mono text-xs text-green-400">Guided, days</td>
-                  <td className="text-center font-mono text-xs">Weeks</td>
-                  <td className="text-center font-mono text-xs">Hours</td>
-                </tr>
-                <tr>
-                  <td className="py-3 pr-4">Starting price</td>
-                  <td className="text-center font-mono text-xs text-green-400">$200/mo</td>
-                  <td className="text-center font-mono text-xs">$1,500+/mo</td>
-                  <td className="text-center font-mono text-xs">$0</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
       {/* FAQ */}
       <section className="border-t" style={{ borderColor: 'var(--border-primary)' }}>
         <div className="max-w-3xl mx-auto px-6 py-20">
@@ -193,7 +130,7 @@ export default function Pricing() {
           <h2 className="text-3xl font-bold mb-10 tracking-tight">Questions.</h2>
           <div className="space-y-0">
             {[
-              { q: 'How long does onboarding take?', a: 'Onboarding is guided during the pilot. We verify domain ownership, set up TLS, connect your origin and run shadow mode with you. No code changes, no SDK, no install.' },
+              { q: 'How do I add a domain?', a: 'Create an account, add a hostname and origin, then publish the DNS TXT record shown in the dashboard. Ownership verification alone does not route traffic; the dashboard shows when setup is complete.' },
               { q: 'What if hakaishield blocks a real user?', a: 'Shadow mode lets you run hakaishield without blocking anything first. See exactly what it would block, tune thresholds, then enforce. Every decision comes with a full evidence trail.' },
               { q: 'How is this different from Cloudflare?', a: 'Cloudflare is a CDN that happens to have bot detection. hakaishield is purpose-built — we read the live TLS handshake and score the first request, not react to logs after the fact.' },
               { q: 'Do you support HTTP/2?', a: 'Yes. HakaiShield serves HTTP/2 and records the HTTP/2 connection fingerprint as evidence alongside JA4.' },
@@ -224,10 +161,10 @@ export default function Pricing() {
         <div className="max-w-5xl mx-auto px-6 py-24 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Ready?</h2>
           <p className="text-lg mb-8" style={{ color: 'var(--text-secondary)' }}>
-            No credit card. Start in shadow mode and see what we find.
+            Create a setup account to verify a domain. Payment and automated activation are still in development.
           </p>
-          <a href="/contact" className="group btn-primary px-8 py-3 text-sm inline-flex items-center gap-2">
-            Request a pilot
+          <a href="/sign-up" className="group btn-primary px-8 py-3 text-sm inline-flex items-center gap-2">
+            Create account
             <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
           </a>
         </div>

@@ -87,8 +87,7 @@ export default function Subscription() {
           <AlertCircle size={18} className="text-yellow-400 shrink-0" />
           <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
             Billing isn't wired up yet — there's no real subscription, usage metering, or invoice history to show.
-            The plans below are for reference only; <a href="/contact" className="underline">contact us</a> to
-            subscribe today.
+            The plans below are proposed packages. Pricing and limits are subject to change.
           </p>
         </div>
 

@@ -32,8 +32,7 @@ export default function Payment() {
         <AlertCircle size={32} className="mx-auto mb-4 text-yellow-400" />
         <h1 className="text-2xl font-bold mb-2 tracking-tight">Payments aren't set up yet</h1>
         <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>
-          We don't have a payment processor wired up yet, so there's no way to collect a card here safely. To
-          subscribe, reach out and we'll sort out billing directly.
+          Checkout is not available. We do not collect card details or activate paid protection on this page.
         </p>
         <a href="/contact" className="btn-primary inline-block px-6 py-2.5 text-sm">Contact us</a>
       </div>

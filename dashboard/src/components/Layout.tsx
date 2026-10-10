@@ -158,6 +158,14 @@ export default function Layout() {
                       {user.email}
                     </div>
                   )}
+                  <NavLink
+                    to="/communication-preferences"
+                    onClick={() => setUserOpen(false)}
+                    className="block w-full px-3 py-1.5 text-xs transition-colors"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Email preferences
+                  </NavLink>
                   <button
                     onClick={handleSignOut}
                     className="w-full text-left px-3 py-1.5 text-xs transition-colors"

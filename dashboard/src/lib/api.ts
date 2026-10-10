@@ -90,6 +90,7 @@ export interface Domain {
   name: string;
   status: string;
   verification?: DomainVerification;
+  edge?: DomainVerification;
 }
 
 export async function listDomains() {
@@ -107,6 +108,10 @@ export async function createDomain(domain: string, origin: string) {
 // TXT record the owner added and to record the verdict.
 export async function verifyDomain(id: string) {
   return request<string | null>(`/domains/${encodeURIComponent(id)}/verify`, { method: 'POST' });
+}
+
+export async function activateDomain(id: string) {
+  return request<string | null>(`/domains/${encodeURIComponent(id)}/activate`, { method: 'POST' });
 }
 
 export interface PolicyDocument {
@@ -173,6 +178,20 @@ export interface RulesResponse {
 
 export async function listRules() {
   return request<RulesResponse>('/rules');
+}
+
+export async function createRule(name: string, conditions: RuleCondition[], action: string) {
+  return request<CustomRule>('/rules/custom', {
+    method: 'POST',
+    body: JSON.stringify({ name, conditions, action }),
+  });
+}
+
+export async function setRuleEnabled(id: string, enabled: boolean) {
+  return request<string>(`/rules/${encodeURIComponent(id)}/toggle`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 // ---- Dashboard ----

@@ -19,7 +19,7 @@ export default function SignIn() {
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
       if (!cancelled && data.session) {
-        navigate(data.session.user.user_metadata?.onboarding_complete === true ? '/' : '/onboarding', { replace: true });
+        navigate('/', { replace: true });
       }
     });
     return () => {
@@ -37,8 +37,7 @@ export default function SignIn() {
         password: formData.password,
       });
       if (signInError) throw signInError;
-      const onboardingComplete = data.user?.user_metadata?.onboarding_complete === true;
-      navigate(onboardingComplete ? '/' : '/onboarding');
+      navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed. Try again.');
     } finally {
@@ -113,7 +112,7 @@ export default function SignIn() {
           <div className="mt-6 pt-6 border-t text-center" style={{ borderColor: 'var(--border-primary)' }}>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               Don't have an account?{' '}
-              <a href="/contact" className="font-medium" style={{ color: 'var(--accent-blue)' }}>Request pilot access</a>
+              <a href="/sign-up" className="font-medium" style={{ color: 'var(--accent-blue)' }}>Create an account</a>
             </p>
           </div>
         </div>

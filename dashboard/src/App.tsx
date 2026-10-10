@@ -1,8 +1,8 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import RequireAuth from './components/RequireAuth';
-import Overview from './pages/Overview';
 import EvidenceLogs from './pages/EvidenceLogs';
 import MitigationRules from './pages/MitigationRules';
 import ProtectionSettings from './pages/ProtectionSettings';
@@ -16,12 +16,19 @@ import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
-import Onboarding from './pages/Onboarding';
 import Subscription from './pages/Subscription';
 import Payment from './pages/Payment';
 import About from './pages/About';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
+import AcceptableUse from './pages/AcceptableUse';
+import Cookies from './pages/Cookies';
+import DataProcessing from './pages/DataProcessing';
+import CommunicationPreferences from './pages/CommunicationPreferences';
+
+// The chart library is needed only after authentication. Keep it out of the
+// public landing and signup bundle.
+const Overview = lazy(() => import('./pages/Overview'));
 
 function App() {
   return (
@@ -37,6 +44,9 @@ function App() {
           <Route path="/about" element={<About />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/acceptable-use" element={<AcceptableUse />} />
+          <Route path="/cookies" element={<Cookies />} />
+          <Route path="/data-processing" element={<DataProcessing />} />
 
           {/* Authentication Pages */}
           <Route path="/sign-in" element={<SignIn />} />
@@ -44,7 +54,7 @@ function App() {
           <Route path="/login" element={<Navigate to="/sign-in" replace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/onboarding" element={<Navigate to="/domains-siem" replace />} />
 
           {/* Subscription & Payment */}
           <Route path="/subscription" element={<Subscription />} />
@@ -53,11 +63,12 @@ function App() {
           {/* Dashboard (requires a signed-in session) */}
           <Route element={<RequireAuth />}>
             <Route path="/" element={<Layout />}>
-              <Route index element={<Overview />} />
+              <Route index element={<Suspense fallback={<p role="status" className="p-6 text-sm">Loading dashboard…</p>}><Overview /></Suspense>} />
               <Route path="evidence-logs" element={<EvidenceLogs />} />
               <Route path="mitigation-rules" element={<MitigationRules />} />
               <Route path="protection-settings" element={<ProtectionSettings />} />
               <Route path="domains-siem" element={<DomainsSiem />} />
+              <Route path="communication-preferences" element={<CommunicationPreferences />} />
             </Route>
           </Route>
 

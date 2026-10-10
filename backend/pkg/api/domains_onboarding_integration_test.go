@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,6 +61,9 @@ func TestDomainOnboardingIntegration(t *testing.T) {
 	if _, err := pool.Exec(ctx, integrationSchemaSQL); err != nil {
 		t.Fatalf("create integration tables: %v", err)
 	}
+	if err := db.InitSchema(ctx, pool); err != nil {
+		t.Fatalf("apply application schema: %v", err)
+	}
 
 	oldDB := db.DB
 	db.DB = pool
@@ -90,6 +94,19 @@ func TestDomainOnboardingIntegration(t *testing.T) {
 	if err := db.MarkDomainVerified(ctx, "user-a", created.ID); !errors.Is(err, db.ErrDomainNotFound) {
 		t.Fatalf("second verify matched a verified row: err=%v", err)
 	}
+	if err := db.MarkDomainActive(ctx, "user-b", created.ID); !errors.Is(err, db.ErrDomainNotFound) {
+		t.Fatalf("another account activated the domain: err=%v, want ErrDomainNotFound", err)
+	}
+	if err := db.MarkDomainActive(ctx, "user-a", created.ID); err != nil {
+		t.Fatalf("owner activation: %v", err)
+	}
+	_, _, mode, _, status, owner, err := db.GetTenant(ctx, created.Host)
+	if err != nil || status != db.StatusActive || mode != "shadow" || owner != "user-a" {
+		t.Fatalf("activated tenant status=%q mode=%q owner=%q err=%v, want active shadow owned by user-a", status, mode, owner, err)
+	}
+	if err := db.MarkDomainActive(ctx, "user-a", created.ID); !errors.Is(err, db.ErrDomainNotFound) {
+		t.Fatalf("second activation matched active row: err=%v", err)
+	}
 
 	listed, err := db.ListDomains(ctx, "user-a")
 	if err != nil || len(listed) != 1 || listed[0].VerificationToken != "" {
@@ -111,5 +128,69 @@ func TestDomainOnboardingIntegration(t *testing.T) {
 	}
 	if _, err := db.CreateDomain(ctx, "user-c", "c-extra.example.com", "https://origin.example"); !errors.Is(err, db.ErrTooManyPendingDomains) {
 		t.Fatalf("pending cap err=%v, want ErrTooManyPendingDomains", err)
+	}
+
+	// Unproved reservations expire, stop disclosing their old TXT tokens,
+	// and can be claimed again. Verified domains are never reclaimed.
+	if _, err := pool.Exec(ctx, `UPDATE tenants SET created_at = now() - interval '8 days' WHERE owner_user_id = $1`, "user-c"); err != nil {
+		t.Fatalf("age pending domains: %v", err)
+	}
+	var oldID string
+	if err := pool.QueryRow(ctx, `SELECT id FROM tenants WHERE host = $1`, "c0.example.com").Scan(&oldID); err != nil {
+		t.Fatalf("find expired reservation: %v", err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO tenant_policy_revisions (tenant_id, version, owner_user_id, actor_user_id, document_json)
+		 VALUES ($1, 1, 'user-c', 'user-c', '{"mode":"shadow","rules":[]}')`,
+		`INSERT INTO evidence_records (tenant_id, at, record) VALUES ($1, now(), '{"decision":"allow"}')`,
+		`INSERT INTO training_samples (tenant_id, fired, feature_version, automated, source)
+		 VALUES ($1, 0, 'v1', false, 'test')`,
+	} {
+		if _, err := pool.Exec(ctx, statement, oldID); err != nil {
+			t.Fatalf("seed expired domain data: %v", err)
+		}
+	}
+	if expired, err := db.GetOwnedDomain(ctx, "user-c", oldID); err != nil || expired.Status != db.StatusExpired || expired.VerificationToken != "" {
+		t.Fatalf("expired domain = %+v err=%v", expired, err)
+	}
+	if err := db.MarkDomainVerified(ctx, "user-c", oldID); !errors.Is(err, db.ErrDomainNotFound) {
+		t.Fatalf("expired reservation verified: %v", err)
+	}
+	if _, err := db.CreateDomain(ctx, "user-d", "c0.example.com", "https://another-origin.example"); err != nil {
+		t.Fatalf("reclaim expired host: %v", err)
+	}
+	for _, table := range []string{"tenant_policy_revisions", "evidence_records", "training_samples"} {
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE tenant_id = $1`, oldID).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("expired domain retained %s rows: count=%d err=%v", table, count, err)
+		}
+	}
+	if _, err := db.CreateDomain(ctx, "user-c", "c-extra.example.com", "https://origin.example"); err != nil {
+		t.Fatalf("expired reservations still counted against quota: %v", err)
+	}
+
+	// The quota must also hold under simultaneous requests from one account.
+	var wg sync.WaitGroup
+	results := make(chan error, 10)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := db.CreateDomain(ctx, "user-e", fmt.Sprintf("e%d.example.com", i), "https://origin.example")
+			results <- err
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+	successes := 0
+	for err := range results {
+		if err == nil {
+			successes++
+		} else if !errors.Is(err, db.ErrTooManyPendingDomains) {
+			t.Fatalf("concurrent reservation error: %v", err)
+		}
+	}
+	if successes != 5 {
+		t.Fatalf("concurrent reservations = %d, want five", successes)
 	}
 }

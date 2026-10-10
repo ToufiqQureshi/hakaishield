@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import { getStats, getTopOffenders, ApiError, type DashboardStats, type TopOffender } from '../lib/api';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { getEvidenceLogs, getStats, getTopOffenders, ApiError, type DashboardStats, type TopOffender } from '../lib/api';
+import { trafficSample, type TrafficBucket } from '../lib/trafficSample';
 import type { LayoutContext } from '../components/Layout';
 
 // formatEgress renders the tenant's cost number the way the monthly
@@ -18,6 +20,8 @@ export default function Overview() {
   const { selectedDomain, domainsLoading } = useOutletContext<LayoutContext>();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [offenders, setOffenders] = useState<TopOffender[]>([]);
+  const [traffic, setTraffic] = useState<TrafficBucket[]>([]);
+  const [trafficError, setTrafficError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,6 +29,8 @@ export default function Overview() {
     const controller = new AbortController();
     setStats(null);
     setOffenders([]);
+    setTraffic([]);
+    setTrafficError(false);
     setError(null);
     if (!selectedDomain) {
       setLoading(false);
@@ -44,6 +50,9 @@ export default function Overview() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
+    getEvidenceLogs(selectedDomain.id, controller.signal)
+      .then((entries) => { if (!controller.signal.aborted) setTraffic(trafficSample(entries)); })
+      .catch(() => { if (!controller.signal.aborted) setTrafficError(true); });
     return () => controller.abort();
   }, [selectedDomain]);
 
@@ -52,7 +61,7 @@ export default function Overview() {
       <div className="card p-6 flex items-center gap-3">
         <AlertCircle size={18} className="text-yellow-400 shrink-0" />
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          No protected domain yet. <a href="/domains-siem" className="underline">View pilot setup</a> to get started.
+          No protected domain yet. <a href="/domains-siem" className="underline">Add your domain</a> to get started.
         </p>
       </div>
     );
@@ -128,6 +137,33 @@ export default function Overview() {
       )}
 
       {/* Top Offenders */}
+      <div className="card p-5">
+        <p className="text-xs font-mono mb-1" style={{ color: 'var(--text-muted)' }}>// traffic</p>
+        <h2 className="text-sm font-semibold">Recent decisions by hour</h2>
+        <p className="text-xs mt-1 mb-4" style={{ color: 'var(--text-muted)' }}>
+          Based on the edge's most recent 1,000 recorded decisions within 24 hours. Earlier traffic can be absent on busy sites; these counts are not billing totals.
+        </p>
+        {trafficError ? <p role="alert" className="text-xs text-red-400">Could not load recent decisions.</p>
+          : traffic.length === 0 ? <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading recent decisions…</p>
+          : traffic.every((bucket) => bucket.passed + bucket.blocked + bucket.challenged + bucket.deceived + bucket.rateLimited === 0)
+            ? <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No decisions recorded in this period.</p>
+            : <div className="h-64" role="img" aria-label="Recent passed, blocked, challenged, and deceived decisions by hour">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={traffic} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" vertical={false} />
+                  <XAxis dataKey="hour" tickFormatter={(value: string) => new Date(value).toLocaleTimeString([], { hour: 'numeric' })} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} minTickGap={22} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <Tooltip labelFormatter={(value) => new Date(String(value)).toLocaleString()} />
+                  <Area type="monotone" dataKey="passed" name="Passed" stroke="#22c55e" fill="#22c55e" fillOpacity={0.14} />
+                  <Area type="monotone" dataKey="blocked" name="Blocked" stroke="#ef4444" fill="#ef4444" fillOpacity={0.14} />
+                  <Area type="monotone" dataKey="challenged" name="Challenged" stroke="#eab308" fill="#eab308" fillOpacity={0.14} />
+                  <Area type="monotone" dataKey="deceived" name="Deceived" stroke="#f97316" fill="#f97316" fillOpacity={0.14} />
+                  <Area type="monotone" dataKey="rateLimited" name="Rate limited" stroke="#a855f7" fill="#a855f7" fillOpacity={0.14} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>}
+      </div>
+
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border-primary)' }}>
           <div>

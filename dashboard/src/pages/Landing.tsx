@@ -27,7 +27,7 @@ export default function Landing() {
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
             <a href="/sign-in" className="text-sm" style={{ color: 'var(--text-secondary)' }}>Dashboard</a>
-            <a href="/contact" className="btn-primary text-xs py-1.5 px-3">Request a pilot</a>
+            <a href="/sign-up" className="btn-primary text-xs py-1.5 px-3">Create account</a>
           </div>
         </div>
       </nav>
@@ -47,12 +47,12 @@ export default function Landing() {
             hakaishield scores the first request from every client it has never seen. No prior sighting. No blocklists. No waiting.
           </p>
           <div className="flex items-center gap-6 animate-fade-in-up stagger-4">
-            <a href="/contact" className="group btn-primary px-6 py-3 text-sm flex items-center gap-2 hover-lift">
-              Request a pilot
+            <a href="/sign-up" className="group btn-primary px-6 py-3 text-sm flex items-center gap-2 hover-lift">
+              Get started
               <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
             </a>
             <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              From $200/mo · shadow mode first · no card
+              Create an account and verify your domain
             </span>
           </div>
         </div>
@@ -61,7 +61,7 @@ export default function Landing() {
           <div className="flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
             <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Currently in development</span>
-            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>· Looking for 10 founding customers</span>
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>· Payments and automated activation are still being built</span>
           </div>
         </div>
       </section>
@@ -105,7 +105,7 @@ export default function Landing() {
             // how it works
           </p>
           <h2 className="text-3xl md:text-4xl font-bold mb-16 tracking-tight max-w-2xl">
-            Point your DNS. We handle the rest.
+            Verify your site. Review every decision.
           </h2>
 
           <div className="space-y-16">
@@ -114,14 +114,14 @@ export default function Landing() {
                 <span className="text-4xl font-bold font-mono" style={{ color: 'var(--text-muted)' }}>01</span>
               </div>
               <div className="md:col-span-5">
-                <h3 className="text-xl font-semibold mb-2">Point your DNS</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>Point your domain at your HakaiShield proxy. No code changes, no SDK, no install. We verify ownership and set up TLS with you.</p>
+                <h3 className="text-xl font-semibold mb-2">Prove domain ownership</h3>
+                <p style={{ color: 'var(--text-secondary)' }}>Add a hostname and origin in your account, then publish the DNS TXT record shown there. Keep your existing traffic path until TLS setup is confirmed.</p>
               </div>
               <div className="md:col-span-6">
                 <div className="font-mono text-xs p-4 rounded" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)' }}>
-                  <p style={{ color: 'var(--text-muted)' }}>$ dig api.yoursite.com</p>
-                  <p className="mt-2">api.yoursite.com. → A → your HakaiShield proxy IP</p>
-                  <p className="mt-1" style={{ color: 'var(--text-muted)' }}>→ TLS terminated by HakaiShield, not a CDN</p>
+                  <p style={{ color: 'var(--text-muted)' }}>$ dig TXT _hakaishield.api.yoursite.com</p>
+                  <p className="mt-2">_hakaishield.api.yoursite.com. → TXT → verification token</p>
+                  <p className="mt-1" style={{ color: 'var(--text-muted)' }}>→ Ownership verified before traffic cutover</p>
                 </div>
               </div>
             </div>
@@ -229,61 +229,59 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Founding Customer Program */}
+      {/* Customer workflow */}
       <section className="border-t" style={{ borderColor: 'var(--border-primary)' }}>
         <div className="max-w-5xl mx-auto px-6 py-24">
           <div className="max-w-3xl">
             <p className="text-sm font-mono mb-4" style={{ color: 'var(--text-muted)' }}>
-              // founding customers
+              // your protection workflow
             </p>
             <h2 className="text-3xl md:text-4xl font-bold mb-6 tracking-tight">
-              We're looking for 10 founding customers.
+              See what happens to your traffic.
             </h2>
             <p className="text-lg leading-relaxed mb-6" style={{ color: 'var(--text-secondary)' }}>
-              hakaishield is in active development. We're looking for 10 companies to build this with us. You'll get early access, direct line to engineering, and founding customer pricing.
+              Add a domain, prove ownership with DNS, and review the signals HakaiShield sees before turning on enforcement.
             </p>
             <p className="text-lg leading-relaxed mb-8" style={{ color: 'var(--text-secondary)' }}>
-              In return, we need your honest feedback. What works, what doesn't, what's missing. This is how we build something that actually solves the problem.
+              Every decision has an explanation, so you can check the impact on real visitors and adjust your policy with evidence.
             </p>
 
             <div className="space-y-4 mb-8">
               <div className="flex gap-4">
                 <span className="text-2xl font-bold font-mono" style={{ color: 'var(--text-muted)' }}>01</span>
                 <div>
-                  <p className="font-semibold mb-1">Early access</p>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Be among the first to use hakaishield. Shape the roadmap with your feedback.</p>
+                  <p className="font-semibold mb-1">Domain ownership</p>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Verify that you control the hostname with a DNS TXT record.</p>
                 </div>
               </div>
               <div className="flex gap-4">
                 <span className="text-2xl font-bold font-mono" style={{ color: 'var(--text-muted)' }}>02</span>
                 <div>
-                  <p className="font-semibold mb-1">Founding pricing</p>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Founding customers start at $200/mo.</p>
+                  <p className="font-semibold mb-1">Shadow analysis</p>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Inspect proposed decisions before any score blocks traffic.</p>
                 </div>
               </div>
               <div className="flex gap-4">
                 <span className="text-2xl font-bold font-mono" style={{ color: 'var(--text-muted)' }}>03</span>
                 <div>
-                  <p className="font-semibold mb-1">Direct support</p>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Weekly calls with the engineering team. Your problems get solved fast.</p>
+                  <p className="font-semibold mb-1">Decision evidence</p>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>See the request signals behind allows, challenges, and blocks.</p>
                 </div>
               </div>
               <div className="flex gap-4">
                 <span className="text-2xl font-bold font-mono" style={{ color: 'var(--text-muted)' }}>04</span>
                 <div>
-                  <p className="font-semibold mb-1">Zero risk</p>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Start with shadow mode. See what we find before blocking anything.</p>
+                  <p className="font-semibold mb-1">Policy control</p>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Save rule drafts and route tags for your own domains.</p>
                 </div>
               </div>
             </div>
 
-            <a href="/contact" className="group btn-primary px-6 py-3 text-sm inline-flex items-center gap-2">
-              Apply for founding access
+            <a href="/sign-up" className="group btn-primary px-6 py-3 text-sm inline-flex items-center gap-2">
+              Create an account
               <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
             </a>
-            <p className="text-sm mt-4" style={{ color: 'var(--text-muted)' }}>
-              No credit card required
-            </p>
+            <p className="text-sm mt-4" style={{ color: 'var(--text-muted)' }}>Start with domain ownership verification.</p>
           </div>
         </div>
       </section>
@@ -352,17 +350,17 @@ export default function Landing() {
       <section className="border-t" style={{ borderColor: 'var(--border-primary)' }}>
         <div className="max-w-5xl mx-auto px-6 py-32 text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
-            Stop losing revenue<br />to bots.
+            Understand what bots<br />are doing on your site.
           </h2>
           <p className="text-xl mb-10 max-w-xl mx-auto" style={{ color: 'var(--text-secondary)' }}>
             Start with shadow mode. See what we'd block. Then decide.
           </p>
-          <a href="/contact" className="group btn-primary px-8 py-4 text-base inline-flex items-center gap-2">
-            Request a pilot
+          <a href="/sign-up" className="group btn-primary px-8 py-4 text-base inline-flex items-center gap-2">
+            Create an account
             <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
           </a>
           <p className="text-sm mt-6" style={{ color: 'var(--text-muted)' }}>
-            No credit card · Shadow mode first · Nothing is blocked until you decide
+            Domain verification is available now. Paid protection is not yet available.
           </p>
         </div>
       </section>
@@ -397,6 +395,9 @@ export default function Landing() {
               <ul className="space-y-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <li><a href="/terms" className="hover:text-white transition-colors">Terms of Service</a></li>
                 <li><a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a></li>
+                <li><a href="/acceptable-use" className="hover:text-white transition-colors">Acceptable Use</a></li>
+                <li><a href="/cookies" className="hover:text-white transition-colors">Cookie Notice</a></li>
+                <li><a href="/data-processing" className="hover:text-white transition-colors">Data Processing Addendum</a></li>
               </ul>
             </div>
           </div>

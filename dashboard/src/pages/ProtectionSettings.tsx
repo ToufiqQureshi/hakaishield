@@ -63,7 +63,7 @@ export default function ProtectionSettings() {
       if (currentDomain.current !== domainId || requestGeneration.current !== generation) return;
       setRevision(next);
       setPath('');
-      setNotice('Saved as a shadow draft. Your operator will review it before activation.');
+      setNotice('Saved as a shadow draft. It does not change live traffic.');
     } catch (cause) {
       if (currentDomain.current !== domainId || requestGeneration.current !== generation) return;
       setError(cause instanceof ApiError && cause.status === 409
@@ -86,13 +86,13 @@ export default function ProtectionSettings() {
     <div className="space-y-6 animate-in">
       <div>
         <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Protection settings</h1>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Pilot policy and route tags for {selectedDomain?.domain ?? 'your domain'}.</p>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Policy and route tags for {selectedDomain?.domain ?? 'your domain'}.</p>
       </div>
       <div className="card p-6 space-y-4 max-w-2xl">
         <Shield size={22} className="text-blue-400" />
-        <h2 className="text-base font-semibold">Managed pilot policy</h2>
+        <h2 className="text-base font-semibold">Domain policy</h2>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Route tags are exact paths. Saving creates a shadow draft; the operator reviews traffic and activates the policy after the pilot gate.
+          Route tags are exact paths. Saving creates a shadow draft. Activation is not available in this dashboard yet.
         </p>
         <div className="flex items-start gap-2 rounded p-3" style={{ background: 'var(--bg-tertiary)' }}>
           <AlertCircle size={16} className="text-yellow-400 shrink-0 mt-0.5" />
@@ -103,7 +103,7 @@ export default function ProtectionSettings() {
         {domainsLoading || loading ? <p role="status" className="text-sm">Loading route tags…</p> : !domainId ? <p className="text-sm">No active domain is selected.</p> : null}
         {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         {notice && <p role="status" className="text-sm text-green-400">{notice}</p>}
-        {active && <p className="text-sm text-yellow-400">This policy is active. Request an operator review before changing route tags.</p>}
+        {active && <p className="text-sm text-yellow-400">This policy is active. Create a new shadow revision before changing route tags.</p>}
         {domainId && loaded && (
           <>
             <ul className="space-y-2 text-sm">
@@ -130,7 +130,7 @@ export default function ProtectionSettings() {
             )}
           </>
         )}
-        <a href="/contact" className="text-xs underline">Request a policy change</a>
+        <a href="/contact" className="text-xs underline">Need help with a policy?</a>
       </div>
     </div>
   );

@@ -103,7 +103,7 @@ export default function Docs() {
                   <p>See what we'd block before enforcing anything</p>
                 </div>
                 <p>
-                  No code changes, no SDK, no install. During the pilot we do this setup with you.
+                  No code changes or SDK are required. Add your domain and follow its DNS verification steps in the dashboard.
                 </p>
               </div>
             </section>

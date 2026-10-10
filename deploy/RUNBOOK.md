@@ -1,5 +1,9 @@
 # Backend deployment handoff
 
+> The inventory below records the 2026-09-28 pilot deployment. Current source
+> Compose now requires managed Upstash TCP Redis and no longer starts local
+> Redis. Supply and verify `REDIS_URL` before applying it to that host.
+
 Last updated: 2026-09-28
 
 This document records the live infrastructure inventory and the exact operator

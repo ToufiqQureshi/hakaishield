@@ -1,8 +1,7 @@
-// The operator inbox that pilot requests go to. Unset until a real inbox
-// exists; pages then show no email rather than an address that bounces.
-export const contactEmail = (import.meta.env.VITE_PILOT_CONTACT_EMAIL || '').trim();
+// A real support inbox must be configured before the contact form is enabled.
+export const contactEmail = (import.meta.env.VITE_CONTACT_EMAIL || import.meta.env.VITE_PILOT_CONTACT_EMAIL || '').trim();
 
-export type PilotRequest = {
+export type ContactRequest = {
   name: string;
   email: string;
   company: string;
@@ -12,10 +11,9 @@ export type PilotRequest = {
   message: string;
 };
 
-// pilotRequestMailto turns the contact form into an email the visitor sends
-// from their own mail app. There is no backend inbox for these requests, so
-// this is the honest way to deliver them instead of pretending to submit.
-export function pilotRequestMailto(to: string, r: PilotRequest): string {
+// The visitor sends this from their mail app. There is no backend inbox, so
+// opening a mail draft must never be represented as a completed submission.
+export function contactRequestMailto(to: string, r: ContactRequest): string {
   const body = [
     `Name: ${r.name}`,
     `Email: ${r.email}`,
@@ -26,6 +24,6 @@ export function pilotRequestMailto(to: string, r: PilotRequest): string {
     '',
     r.message,
   ].join('\n');
-  const subject = `HakaiShield pilot request: ${r.company || r.name}`;
+  const subject = `HakaiShield inquiry: ${r.company || r.name}`;
   return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

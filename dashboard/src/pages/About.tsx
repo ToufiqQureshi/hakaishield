@@ -70,7 +70,7 @@ export default function About() {
             Questions? We'd love to hear from you.
           </p>
           <p>
-            <a href="/contact" style={{ color: 'var(--accent-blue)' }}>Request a pilot</a>
+            <a href="/sign-up" style={{ color: 'var(--accent-blue)' }}>Create an account</a>
             {contactEmail && <> or email <a href={`mailto:${contactEmail}`} style={{ color: 'var(--accent-blue)' }}>{contactEmail}</a></>}.
           </p>
         </div>

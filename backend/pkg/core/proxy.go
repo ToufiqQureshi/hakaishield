@@ -13,7 +13,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ToufiqQureshi/hakaishield/pkg/deception"
@@ -113,19 +115,33 @@ var DefaultOriginTransport = &http.Transport{
 
 func publicOriginTransport() *http.Transport {
 	t := DefaultOriginTransport.Clone()
+	// Customer-configured origins must be reached directly. An inherited
+	// HTTP_PROXY could otherwise tunnel an internal target through a proxy,
+	// bypassing the connected-address check below.
+	t.Proxy = nil
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	t.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		conn, err := dialer.DialContext(ctx, network, address)
 		if err != nil {
 			return nil, err
 		}
-		if tcp, ok := conn.RemoteAddr().(*net.TCPAddr); ok && blockedOriginIP(tcp.IP) {
-			_ = conn.Close()
-			return nil, fmt.Errorf("origin resolved to non-public address %s", tcp.IP.String())
+		if tcp, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+			if blockedOriginIP(tcp.IP) || originPointsToEdge(tcp.IP) {
+				_ = conn.Close()
+				return nil, fmt.Errorf("origin resolved to a disallowed address %s", tcp.IP.String())
+			}
 		}
 		return conn, nil
 	}
 	return t
+}
+
+// A DNS alias can point an otherwise separate origin hostname back to this
+// edge later. Check the connected address on every new origin connection so
+// a DNS change cannot create an unbounded self-proxy loop.
+func originPointsToEdge(ip net.IP) bool {
+	edge := strings.TrimSpace(os.Getenv("HAKAISHIELD_EDGE_IPV4"))
+	return PublicEdgeIPv4(edge) && ip.Equal(net.ParseIP(edge))
 }
 
 // ValidatePublicOrigin rejects origins that would let a dashboard user make
@@ -405,4 +421,38 @@ func NewPublicOriginProxy(target string) (*httputil.ReverseProxy, error) {
 	}
 	p.Transport = publicOriginTransport()
 	return p, nil
+}
+
+// ProbePublicOrigin checks that the configured origin can serve this site
+// before DNS cutover. It uses the same dial-time public-IP guard as visitor
+// proxying, refuses redirects (which could escape the validated origin), and
+// treats an application 4xx as reachable while rejecting server failures.
+func ProbePublicOrigin(ctx context.Context, target, protectedHost string) error {
+	if err := ValidatePublicOrigin(target); err != nil {
+		return err
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return err
+	}
+	u.Path = "/"
+	u.RawQuery = ""
+	u.Fragment = ""
+	transport := publicOriginTransport()
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Host = protectedHost
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("origin health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 500 {
+		return fmt.Errorf("origin returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

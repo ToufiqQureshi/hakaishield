@@ -29,6 +29,7 @@ import (
 	"github.com/ToufiqQureshi/hakaishield/pkg/db"
 	"github.com/ToufiqQureshi/hakaishield/pkg/decide"
 	"github.com/ToufiqQureshi/hakaishield/pkg/evidence"
+	"github.com/ToufiqQureshi/hakaishield/pkg/health"
 	"github.com/ToufiqQureshi/hakaishield/pkg/labels"
 	"github.com/ToufiqQureshi/hakaishield/pkg/observability"
 	"github.com/ToufiqQureshi/hakaishield/pkg/policyprovider"
@@ -37,6 +38,8 @@ import (
 	"github.com/ToufiqQureshi/hakaishield/pkg/signals"
 	"github.com/ToufiqQureshi/hakaishield/pkg/tenant"
 	"github.com/ToufiqQureshi/hakaishield/pkg/tenantpolicy"
+	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5"
@@ -101,6 +104,25 @@ func redactCredentials(rawURL string) string {
 	return u.String()
 }
 
+func apiDomainHost(raw string) (string, bool) {
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(raw), "."))
+	if host == "" || len(host) > 253 || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
+		return "", false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return "", false
+		}
+		for _, r := range label {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+				continue
+			}
+			return "", false
+		}
+	}
+	return host, true
+}
+
 // matchingDefaultOwner binds policy ownership only when the dashboard row
 // describes the same live host and origin as this pilot process.
 func matchingDefaultOwner(rowHost, rowTarget, rowStatus, owner, host, target string) (string, error) {
@@ -125,13 +147,30 @@ func lookupDefaultOwner(ctx context.Context, host, target string, loader tenant.
 
 func main() {
 	loadDotEnv(".env")
+	defaultRedisURL := "redis://localhost:6379"
+	if upstashURL := strings.TrimSpace(os.Getenv("UPSTASH_REDIS_URL")); upstashURL != "" {
+		if !strings.HasPrefix(upstashURL, "rediss://") {
+			log.Fatal("hakaishield: UPSTASH_REDIS_URL must be the TLS rediss:// URL from the Upstash TCP tab")
+		}
+		defaultRedisURL = upstashURL
+	} else if redisEnvURL := strings.TrimSpace(os.Getenv("REDIS_URL")); redisEnvURL != "" {
+		defaultRedisURL = redisEnvURL
+	} else if os.Getenv("UPSTASH_REDIS_REST_URL") != "" || os.Getenv("UPSTASH_REDIS_REST_TOKEN") != "" {
+		log.Print("hakaishield: Upstash REST credentials are set, but the Go edge needs UPSTASH_REDIS_URL from the TCP tab; Redis will use the -redis-url setting")
+	} else if os.Getenv("UPSTASH_TOKEN") != "" {
+		log.Print("hakaishield: UPSTASH_TOKEN alone does not configure the Go Redis client; set UPSTASH_REDIS_URL from the Upstash TCP tab")
+	}
 
 	addr := flag.String("addr", ":8080", "address to listen on")
+	healthAddr := flag.String("health-addr", "127.0.0.1:9090", "private HTTP readiness listener; set empty to disable")
 	target := flag.String("target", "", "origin server to protect, e.g. https://example.com")
 	originHostFromTarget := flag.Bool("origin-host-from-target", false, "send the target URL host to the origin when its virtual host differs from the protected hostname")
 	host := flag.String("host", "", "public hostname for the default tenant; empty permits any Host for local development")
 	certFile := flag.String("tls-cert", "", "TLS certificate file; enables TLS + JA4 fingerprinting")
 	keyFile := flag.String("tls-key", "", "TLS private key file, required with -tls-cert")
+	acmeCacheDir := flag.String("acme-cache-dir", os.Getenv("ACME_CACHE_DIR"), "durable directory for automatic customer TLS certificates; requires -db-url, -tls-cert and -tls-key")
+	acmeEmail := flag.String("acme-email", os.Getenv("ACME_EMAIL"), "ACME account contact email for customer TLS certificates")
+	acmeDirectory := flag.String("acme-directory-url", os.Getenv("ACME_DIRECTORY_URL"), "optional ACME directory URL (use the CA staging directory for tests)")
 	challengeSecret := flag.String("challenge-secret", "", "Shared secret for stateless JS challenges. If empty, a random one is generated.")
 	evidenceToken := flag.String("evidence-token", os.Getenv("EVIDENCE_TOKEN"), "bearer token for the per-request evidence endpoint; unset leaves the endpoint off")
 	observabilityToken := flag.String("observability-token", os.Getenv("HAKAISHIELD_OBSERVABILITY_TOKEN"), "bearer token for aggregate operational counters; unset leaves the endpoint off")
@@ -140,7 +179,7 @@ func main() {
 	policyFlag := flag.String("policy", "balanced", `policy strategy: "balanced" (allow clean score 0, challenge suspicious) or "strict" (mandatory challenge)`)
 	deceptionFlag := flag.Bool("deception", false, "enable deception mode (forwards high-confidence bots to origin with X-HakaiShield-Decision: deceive instead of 403)")
 	trustedProxyCIDRs := flag.String("trusted-proxy-cidrs", "", "comma-separated proxy CIDRs allowed to supply X-Forwarded-For; leave empty to trust only direct peers")
-	redisURL := flag.String("redis-url", "redis://localhost:6379", "Redis connection URL for distributed rate limiting")
+	redisURL := flag.String("redis-url", defaultRedisURL, "Redis connection URL for distributed rate limiting; defaults to UPSTASH_REDIS_URL or REDIS_URL when set")
 	dbURL := flag.String("db-url", os.Getenv("DATABASE_URL"), "PostgreSQL URL for the Supabase project's database (Project Settings > Database in the Supabase dashboard). Falls back to $DATABASE_URL (including from a local .env file) if unset.")
 	collectLabels := flag.Bool("collect-labels", false, "collect candidate observations from solved challenges and honeypot hits. Requires -db-url. Off by default; see docs/ARCHITECTURE.md.")
 	sampleRetentionDays := flag.Int("sample-retention-days", 30, "delete training samples older than this many days, 1-365; background cleanup requires -db-url")
@@ -150,6 +189,11 @@ func main() {
 	modelPath := flag.String("model", "", "trained decision model (pkg/decide) to score alongside the rules in shadow; it never affects a decision. Unset leaves it off.")
 	supabaseURL := flag.String("supabase-url", os.Getenv("SUPABASE_URL"), "Supabase project URL (e.g. https://xxxx.supabase.co); used to verify dashboard session JWTs against the project's published JWKS. Required, with -db-url, to enable the domains/rules/settings API. Falls back to $SUPABASE_URL (including from a local .env file) if unset.")
 	flag.Parse()
+	if edgeIPv4 := strings.TrimSpace(os.Getenv("HAKAISHIELD_EDGE_IPV4")); edgeIPv4 != "" {
+		if !core.PublicEdgeIPv4(edgeIPv4) {
+			log.Fatal("hakaishield: HAKAISHIELD_EDGE_IPV4 must be a public IPv4 address")
+		}
+	}
 	if *sampleRetentionDays < 1 || *sampleRetentionDays > 365 {
 		log.Fatal("hakaishield: -sample-retention-days must be between 1 and 365")
 	}
@@ -200,7 +244,7 @@ func main() {
 	// Initialize Redis for global rate limiting
 	opt, err := redis.ParseURL(*redisURL)
 	if err != nil {
-		log.Fatalf("hakaishield: invalid redis url: %v", err)
+		log.Fatal("hakaishield: invalid redis URL; check the scheme, hostname, and escaped credentials")
 	}
 	// Request-path Redis operations have their own bounded context. Disable
 	// command retries and permit one dial attempt: during an outage, retries
@@ -230,6 +274,48 @@ func main() {
 			log.Fatalf("hakaishield: initializing postgres db: %v", err)
 		}
 		log.Printf("hakaishield: connected to postgres at %s", redactCredentials(*dbURL))
+	}
+
+	var acmeManager *autocert.Manager
+	var issueCustomerCertificate func(context.Context, string) error
+	if *acmeCacheDir != "" {
+		if *dbURL == "" || *certFile == "" || *keyFile == "" || strings.TrimSpace(*acmeEmail) == "" {
+			log.Fatal("hakaishield: automatic TLS requires -db-url, -tls-cert, -tls-key, and -acme-email")
+		}
+		if err := os.MkdirAll(*acmeCacheDir, 0700); err != nil {
+			log.Fatalf("hakaishield: creating ACME cache directory: %v", err)
+		}
+		if err := os.Chmod(*acmeCacheDir, 0700); err != nil {
+			log.Fatalf("hakaishield: securing ACME cache directory: %v", err)
+		}
+		acmeManager = &autocert.Manager{
+			Prompt: autocert.AcceptTOS, Email: *acmeEmail, Cache: autocert.DirCache(*acmeCacheDir),
+			HostPolicy: func(ctx context.Context, requested string) error {
+				name, ok := apiDomainHost(requested)
+				if !ok {
+					return errors.New("invalid certificate hostname")
+				}
+				if *host != "" && name == strings.ToLower(strings.TrimSuffix(*host, ".")) {
+					return nil
+				}
+				_, _, _, _, status, owner, err := db.GetTenant(ctx, name)
+				if err != nil {
+					return errors.New("certificate hostname is not registered")
+				}
+				if owner == "" || (status != db.StatusVerified && status != db.StatusActive) {
+					return errors.New("certificate hostname is not verified")
+				}
+				return nil
+			},
+		}
+		if *acmeDirectory != "" {
+			acmeManager.Client = &acme.Client{DirectoryURL: *acmeDirectory}
+		}
+		issueCustomerCertificate = func(ctx context.Context, name string) error {
+			_, err := acmeManager.GetCertificate(&tls.ClientHelloInfo{ServerName: name})
+			return err
+		}
+		log.Printf("hakaishield: automatic customer TLS enabled (ACME cache: %s)", *acmeCacheDir)
 	}
 
 	store := tenant.NewStore()
@@ -415,6 +501,7 @@ func main() {
 		// backend only verifies the JWT Supabase already issued.
 		mux.HandleFunc("/api/v1/domains", api.DomainsHandler(verifier))
 		mux.HandleFunc("/api/v1/domains/{id}/verify", api.DomainVerifyHandler(verifier))
+		mux.HandleFunc("/api/v1/domains/{id}/activate", api.DomainActivateHandler(verifier, issueCustomerCertificate))
 		mux.Handle("/api/v1/dashboard/stats", api.DashboardStatsHandler(store, verifier))
 		mux.HandleFunc("/api/v1/rules", api.RulesListHandler(rulesStore, verifier))
 		mux.HandleFunc("/api/v1/rules/custom", api.CreateRuleHandler(rulesStore, verifier))
@@ -462,17 +549,66 @@ func main() {
 		// detection logic reads TLS version to spot automation
 		// (UAMismatch in pkg/signals), accepting them here would also
 		// undermine that signal for real visitors on old clients.
-		tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}}
+		if acmeManager != nil {
+			defaultCert := cert
+			tlsConfig.Certificates = nil
+			// Keep normal visitor protocols advertised alongside TLS-ALPN-01.
+			// The capture listener uses this config rather than srv.TLSConfig.
+			tlsConfig.NextProtos = append(tlsConfig.NextProtos, acme.ALPNProto)
+			tlsConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				if *host != "" && strings.EqualFold(strings.TrimSuffix(hello.ServerName, "."), strings.TrimSuffix(*host, ".")) {
+					return &defaultCert, nil
+				}
+				return acmeManager.GetCertificate(hello)
+			}
+		}
 		ln = core.NewCaptureListener(ln, tlsConfig)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	var healthServer *http.Server
+	if *healthAddr != "" {
+		healthMux := http.NewServeMux()
+		probes := []health.Probe{
+			func(ctx context.Context) error {
+				if db.DB == nil {
+					return errors.New("postgres is not configured")
+				}
+				return db.DB.Ping(ctx)
+			},
+			func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
+		}
+		healthMux.Handle("GET /ready", health.ReadyHandler(ctx.Done(), probes...))
+		// Use an unencrypted listener only on the container loopback interface.
+		// No customer request or reverse proxy route can reach this handler.
+		healthListener, err := net.Listen("tcp", *healthAddr)
+		if err != nil {
+			log.Fatalf("hakaishield: readiness listener: %v", err)
+		}
+		healthServer = &http.Server{Handler: healthMux, ReadHeaderTimeout: 3 * time.Second}
+		go func() {
+			if err := healthServer.Serve(healthListener); err != nil && err != http.ErrServerClosed {
+				log.Printf("hakaishield: readiness listener stopped: %v", err)
+			}
+		}()
+	}
+	var evidenceWriterStop context.CancelFunc
+	var evidenceWriterDone chan struct{}
 	if *dbURL != "" {
 		go runSampleRetention(ctx, *sampleRetentionDays)
 	}
 	if evidenceWriter != nil {
-		go evidenceWriter.Run(ctx)
+		// Keep the writer alive while Shutdown drains in-flight HTTP requests.
+		// Cancelling it with the signal context would lose their last records.
+		writerCtx, writerStop := context.WithCancel(context.Background())
+		evidenceWriterStop = writerStop
+		evidenceWriterDone = make(chan struct{})
+		go func() {
+			defer close(evidenceWriterDone)
+			evidenceWriter.Run(writerCtx)
+		}()
 		hydrateCtx, cancelHydrate := context.WithTimeout(ctx, 5*time.Second)
 		store.HydrateEvidence(hydrateCtx)
 		cancelHydrate()
@@ -495,8 +631,21 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if healthServer != nil {
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("hakaishield: readiness shutdown error: %v", err)
+		}
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("hakaishield: shutdown error: %v", err)
+	}
+	if evidenceWriterStop != nil {
+		evidenceWriterStop()
+		select {
+		case <-evidenceWriterDone:
+		case <-time.After(6 * time.Second):
+			log.Print("hakaishield: evidence writer did not finish before shutdown deadline")
+		}
 	}
 }
 

@@ -13,14 +13,18 @@ type recorded struct {
 }
 
 type fakeSink struct {
-	mu      sync.Mutex
-	batches []recorded
-	fail    bool
+	mu                 sync.Mutex
+	batches            []recorded
+	fail               bool
+	requireLiveContext bool
 }
 
-func (f *fakeSink) AppendBatch(_ context.Context, tenantID string, records []Evidence) error {
+func (f *fakeSink) AppendBatch(ctx context.Context, tenantID string, records []Evidence) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.requireLiveContext && ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if f.fail {
 		return context.DeadlineExceeded
 	}
@@ -87,7 +91,7 @@ func TestWriterDropsInsteadOfBlockingWhenFull(t *testing.T) {
 }
 
 func TestWriterFlushesWhatIsBufferedOnShutdown(t *testing.T) {
-	sink := &fakeSink{}
+	sink := &fakeSink{requireLiveContext: true}
 	w := NewWriter(sink, WriterOptions{QueueSize: 64, BatchSize: 100, FlushInterval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -100,6 +104,19 @@ func TestWriterFlushesWhatIsBufferedOnShutdown(t *testing.T) {
 
 	if got := len(sink.stored()); got != 2 {
 		t.Fatalf("shutdown flushed %d records, want 2", got)
+	}
+}
+
+func TestWriterFlushesQueuedRecordsWhenStartedWithCancelledContext(t *testing.T) {
+	sink := &fakeSink{requireLiveContext: true}
+	w := NewWriter(sink, WriterOptions{QueueSize: 4, BatchSize: 1, FlushInterval: time.Hour})
+	w.enqueue("tenant-a", Evidence{JA4: "fp1"})
+	w.enqueue("tenant-a", Evidence{JA4: "fp2"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	w.Run(ctx)
+	if got := len(sink.stored()); got != 2 {
+		t.Fatalf("cancelled writer flushed %d queued records, want 2", got)
 	}
 }
 

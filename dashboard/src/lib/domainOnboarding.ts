@@ -39,5 +39,8 @@ export function domainInputError(domain: string, origin: string): string | null 
   if (parsed.search || parsed.hash) {
     return 'The origin must not contain a query string or fragment.';
   }
+  if (normalizeDomain(parsed.hostname) === normalizeDomain(domain)) {
+    return 'Use a separate origin hostname or public IP. The protected hostname would loop back to HakaiShield after DNS cutover.';
+  }
   return null;
 }

@@ -43,6 +43,7 @@ func Init(databaseURL string) error {
 	}
 
 	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return fmt.Errorf("unable to ping database: %w", err)
 	}
 
@@ -178,9 +179,12 @@ func ListDomains(ctx context.Context, ownerUserID string) ([]Domain, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
-	const q = `SELECT id, host, target, COALESCE(name, host), status, created_at, COALESCE(verification_token, '')
+	const q = `SELECT id, host, target, COALESCE(name, host),
+		CASE WHEN status = $2 AND created_at < now() - interval '` + pendingDomainTTL + `' THEN $3 ELSE status END,
+		created_at,
+		CASE WHEN status = $2 AND created_at < now() - interval '` + pendingDomainTTL + `' THEN '' ELSE COALESCE(verification_token, '') END
 		FROM tenants WHERE owner_user_id = $1 ORDER BY created_at DESC`
-	rows, err := DB.Query(ctx, q, ownerUserID)
+	rows, err := DB.Query(ctx, q, ownerUserID, StatusPendingVerification, StatusExpired)
 	if err != nil {
 		return nil, fmt.Errorf("listing domains: %w", err)
 	}

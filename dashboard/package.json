@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:marketing": "vite --mode marketing",
     "build": "vite build",
     "build:pages": "node scripts/validate-pages-env.mjs && vite build",
     "build:pages:marketing": "vite build --mode marketing",
@@ -34,6 +35,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.7.0",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "wrangler": "^4.148.0"
   }
 }

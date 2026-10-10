@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"slices"
 
 	"github.com/ToufiqQureshi/hakaishield/pkg/signals"
 	"github.com/wi1dcard/fingerproxy/pkg/hack"
@@ -21,7 +22,11 @@ func NewCaptureListener(inner net.Listener, tlsConfig *tls.Config) net.Listener 
 	// fingerprinted (WireHTTP2 installs the handler). HTTP/1.1 stays
 	// listed so plain browsers and non-h2 tools keep working. See
 	// docs/DECISIONS.md for why h2 was deferred and what changed.
-	cfg.NextProtos = []string{"h2", "http/1.1"}
+	var nextProtos []string
+	if slices.Contains(tlsConfig.NextProtos, "acme-tls/1") {
+		nextProtos = append(nextProtos, "acme-tls/1")
+	}
+	cfg.NextProtos = append(nextProtos, "h2", "http/1.1")
 	return &captureListener{Listener: inner, config: cfg}
 }
 

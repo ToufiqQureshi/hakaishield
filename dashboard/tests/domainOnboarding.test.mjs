@@ -22,6 +22,7 @@ test('normalizeDomain lowercases and strips a trailing dot', () => {
 
 test('a valid domain and origin are accepted', () => {
   assert.equal(domainInputError('shop.example.com', 'https://origin.example'), null);
+  assert.match(domainInputError('shop.example.com', 'https://SHOP.EXAMPLE.COM:443'), /separate origin hostname/);
   assert.equal(domainInputError('Shop.Example.com.', 'http://127.0.0.1:9000'), null);
 });
 

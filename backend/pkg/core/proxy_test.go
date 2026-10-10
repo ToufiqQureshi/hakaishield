@@ -211,6 +211,26 @@ func TestPublicOriginTransportRejectsPrivateDialResult(t *testing.T) {
 	}
 }
 
+func TestPublicOriginTransportRejectsEdgeAddress(t *testing.T) {
+	t.Setenv("HAKAISHIELD_EDGE_IPV4", "8.8.8.8")
+	if !originPointsToEdge(net.ParseIP("8.8.8.8")) {
+		t.Fatal("origin connected to the edge must be refused")
+	}
+	if originPointsToEdge(net.ParseIP("8.8.4.4")) {
+		t.Fatal("unrelated public origin must be allowed")
+	}
+}
+
+func TestProbePublicOriginRejectsPrivateTargetBeforeRequest(t *testing.T) {
+	err := ProbePublicOrigin(context.Background(), "http://127.0.0.1:8080", "shop.example.com")
+	if err == nil {
+		t.Fatal("private origin probe succeeded")
+	}
+	if publicOriginTransport().Proxy != nil {
+		t.Fatal("public origin transport must not inherit outbound HTTP proxies")
+	}
+}
+
 // deceiveResp builds a response as the origin would return it, already
 // tagged with the deceive decision so ModifyResponse acts on it.
 func deceiveResp(t *testing.T, contentType string, body []byte, status int) *http.Response {

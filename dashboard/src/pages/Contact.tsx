@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { ArrowRight } from 'lucide-react';
-import { contactEmail, pilotRequestMailto } from '../lib/contact';
+import { contactEmail, contactRequestMailto } from '../lib/contact';
 
 export default function Contact() {
   const { theme, toggleTheme } = useTheme();
@@ -19,7 +19,7 @@ export default function Contact() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!contactEmail) return;
-    window.location.href = pilotRequestMailto(contactEmail, formData);
+    window.location.href = contactRequestMailto(contactEmail, formData);
     setSubmitted(true);
   };
 
@@ -76,18 +76,19 @@ export default function Contact() {
 
       <div className="max-w-3xl mx-auto px-6 py-16">
         <p className="text-sm font-mono mb-4" style={{ color: 'var(--text-muted)' }}>
-          // founding customer application
+          // contact
         </p>
-        <h1 className="text-4xl font-bold mb-4 tracking-tight">Apply for founding access.</h1>
+        <h1 className="text-4xl font-bold mb-4 tracking-tight">Contact HakaiShield</h1>
         <p className="text-lg mb-12" style={{ color: 'var(--text-secondary)' }}>
-          We're looking for 10 companies to build hakaishield with. You'll get early access, founding pricing, and direct line to engineering.
+          Questions about setup, security, or your account? Send us the details and we'll reply by email.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Name</label>
+              <label htmlFor="contact-name" className="block text-sm font-medium mb-2">Name</label>
               <input
+                id="contact-name"
                 type="text"
                 name="name"
                 value={formData.name}
@@ -98,8 +99,9 @@ export default function Contact() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label htmlFor="contact-email" className="block text-sm font-medium mb-2">Email</label>
               <input
+                id="contact-email"
                 type="email"
                 name="email"
                 value={formData.email}
@@ -113,8 +115,9 @@ export default function Contact() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Company</label>
+              <label htmlFor="contact-company" className="block text-sm font-medium mb-2">Company</label>
               <input
+                id="contact-company"
                 type="text"
                 name="company"
                 value={formData.company}
@@ -125,8 +128,9 @@ export default function Contact() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Website</label>
+              <label htmlFor="contact-website" className="block text-sm font-medium mb-2">Website</label>
               <input
+                id="contact-website"
                 type="url"
                 name="website"
                 value={formData.website}
@@ -139,8 +143,9 @@ export default function Contact() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Monthly visitors</label>
+            <label htmlFor="contact-visitors" className="block text-sm font-medium mb-2">Monthly visitors</label>
             <select
+              id="contact-visitors"
               name="monthlyVisitors"
               value={formData.monthlyVisitors}
               onChange={handleChange}
@@ -158,8 +163,9 @@ export default function Contact() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">What's your bot problem?</label>
+            <label htmlFor="contact-problem" className="block text-sm font-medium mb-2">What's your bot problem?</label>
             <select
+              id="contact-problem"
               name="botProblem"
               value={formData.botProblem}
               onChange={handleChange}
@@ -178,8 +184,9 @@ export default function Contact() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Anything else? (optional)</label>
+            <label htmlFor="contact-message" className="block text-sm font-medium mb-2">Anything else? (optional)</label>
             <textarea
+              id="contact-message"
               name="message"
               value={formData.message}
               onChange={handleChange}
@@ -198,7 +205,7 @@ export default function Contact() {
             <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
               {contactEmail
                 ? 'This opens your mail app with the request filled in. Nothing is sent until you press send.'
-                : 'Online requests are not enabled yet. Contact your pilot operator using your agreed channel.'}
+                : 'Online requests are not enabled yet. A support inbox has not been configured.'}
             </p>
           </div>
         </form>

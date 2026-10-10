@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Copy, Globe } from 'lucide-react';
-import { ApiError, createDomain, verifyDomain } from '../lib/api';
+import { ApiError, activateDomain, createDomain, verifyDomain } from '../lib/api';
 import { domainInputError } from '../lib/domainOnboarding';
 import { domainState } from '../lib/domainStatus';
 import type { LayoutContext } from '../components/Layout';
@@ -36,9 +36,11 @@ export default function DomainsSiem() {
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
   const [verifyResult, setVerifyResult] = useState<{ id: string; message: string; ok: boolean } | null>(null);
 
   const pending = domains.filter((d) => d.status === 'pending_verification' && d.verification);
+  const verified = domains.filter((d) => d.status === 'verified');
 
   const onAdd = async (event: FormEvent) => {
     event.preventDefault();
@@ -60,6 +62,20 @@ export default function DomainsSiem() {
       setFormError(err instanceof ApiError ? err.message : 'Could not add the domain. Try again.');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const onActivate = async (id: string) => {
+    setVerifyResult(null);
+    setActivatingId(id);
+    try {
+      await activateDomain(id);
+      setVerifyResult({ id, message: 'Traffic is routing through HakaiShield in monitor mode. Review the observed traffic before enabling enforcement.', ok: true });
+      await refreshDomains();
+    } catch (err) {
+      setVerifyResult({ id, message: err instanceof ApiError ? err.message : 'Could not enable protection. Check DNS and origin, then try again.', ok: false });
+    } finally {
+      setActivatingId(null);
     }
   };
 
@@ -161,6 +177,36 @@ export default function DomainsSiem() {
           {verifyResult?.id === d.id && (
             <p className={`text-xs ${verifyResult.ok ? 'text-green-400' : 'text-red-400'}`}>{verifyResult.message}</p>
           )}
+        </div>
+      ))}
+
+      {verified.map((d) => (
+        <div key={d.id} className="card p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{d.domain}</h2>
+            <span className="badge badge-yellow">Ownership verified</span>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            At your DNS provider, point this hostname to HakaiShield using the A record below. Remove any conflicting A, AAAA, or CNAME records for this hostname. Keep nameservers, MX, and records for other hostnames unchanged. Once DNS updates, enabling protection checks your origin and provisions HTTPS.
+          </p>
+          {d.edge ? (
+            <div className="space-y-2 font-mono text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span style={{ color: 'var(--text-muted)' }}>{d.edge.recordType} name</span>
+                <CopyValue value={d.edge.recordName} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span style={{ color: 'var(--text-muted)' }}>value</span>
+                <CopyValue value={d.edge.recordValue} />
+              </div>
+            </div>
+          ) : (
+            <p role="status" className="text-xs text-yellow-400">The edge address is not configured yet. Contact HakaiShield support before changing DNS.</p>
+          )}
+          <button type="button" onClick={() => onActivate(d.id)} disabled={activatingId === d.id || !d.edge} className="btn-primary px-4 py-2 text-sm disabled:opacity-60">
+            {activatingId === d.id ? 'Checking DNS, origin and TLS…' : 'Enable protection'}
+          </button>
+          {verifyResult?.id === d.id && <p className={`text-xs ${verifyResult.ok ? 'text-green-400' : 'text-red-400'}`}>{verifyResult.message}</p>}
         </div>
       ))}
 

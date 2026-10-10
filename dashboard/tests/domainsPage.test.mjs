@@ -48,6 +48,18 @@ test('a pending domain shows its TXT record and a verify action, never Protected
   assert.doesNotMatch(html, />Protected</);
 });
 
+test('a verified domain shows its exact A record and waits for edge configuration', () => {
+  const domain = { id: 'd3', domain: 'shop.example.com', origin: 'https://origin.example', name: 'shop.example.com', status: 'verified' };
+  const configured = render([{ ...domain, edge: { recordType: 'A', recordName: 'shop.example.com', recordValue: '8.8.8.8' } }]);
+  assert.match(configured, /8\.8\.8\.8/);
+  assert.match(configured, /Enable protection/);
+  assert.doesNotMatch(configured, /The edge address is not configured yet/);
+
+  const missing = render([domain]);
+  assert.match(missing, /The edge address is not configured yet/);
+  assert.match(missing, /disabled=""[^>]*>Enable protection/);
+});
+
 test('an active domain is the only one shown as Protected', () => {
   const html = render([{ id: 'd2', domain: 'live.example.com', origin: 'https://origin.example', name: 'live.example.com', status: 'active' }]);
   assert.match(html, /Protected/);

@@ -1,0 +1,53 @@
+# Public SaaS ship decision — 2026-10-05
+
+**Decision: NO-GO for paid, self-serve public launch tomorrow.** Payments remain intentionally deferred. The code now supports owner-triggered customer certificate issuance and activation for a verified domain, but live edge deployment and direct DNS/TLS validation remain untested.
+
+## System inspected
+
+- The Go proxy captures the visitor TLS ClientHello, resolves an exact tenant host, evaluates signals and policy, proxies to an origin, and records evidence. Redis holds short-lived counters and challenge state. PostgreSQL holds tenants, rules, policy revisions, training samples, settings, and optional durable evidence.
+- The React/Vite dashboard uses Supabase Auth tokens for the Go API. `backend/pkg/db/db.go` contains schema creation; tenant and policy structures live in `backend/pkg/tenant/tenant.go` and `backend/pkg/tenantpolicy/store.go`. There is no `models.go` in this repository.
+- `deploy/docker-compose.yml` remains a single-host default deployment. Customer ACME certificates can be served when direct visitor TLS reaches the Go edge and `ACME_CACHE_DIR` is durable. Cloudflare Tunnel or proxied DNS terminates visitor TLS before the app and cannot use this TLS-ALPN flow.
+
+## Fixed during this audit
+
+- Expired unverified hostname reservations can be reclaimed after seven days, with pending quotas serialized under concurrent creation. Reclamation now removes the old tenant's policy revisions and telemetry in the same transaction.
+- The evidence writer now uses bounded independent write contexts, flushes records when its run context is cancelled, and remains alive until in-flight HTTP requests have drained. Compose gives it a longer stop grace period.
+- The previous rule builder visual was restored with authenticated create/toggle API calls. Its rules are explicitly described as shadow drafts. The overview chart uses real recent evidence, labels the 1,000-record cap, and loads separately from public pages.
+- Pilot/founding-customer calls to action were replaced with account/domain-setup copy. Pricing and payment pages now disclose that their packages are proposed and checkout is unavailable. Marketing-only builds show an explicit unavailable page when visitors select account actions, instead of silently looping to the landing page.
+- Session-check failures now resolve to signed-out state instead of leaving a blank dashboard.
+
+## Verification evidence
+
+- Pinned Go 1.26.6: `go test ./...` and `go vet ./...` pass, including all activation and HTTP/2 tests. Host Go 1.27.1 failed two core HTTP/2 tests, so builds and CI should honor the pinned toolchain until that compatibility is resolved.
+- Dashboard: `npm test` passes 42 tests; `npm run typecheck`, `npm run build`, and `npm run build:pages:marketing` pass.
+- Browser at 390px: landing, pricing, and signup render with no horizontal overflow or page errors. Signed-out dashboard access redirects to sign-in. In the marketing build, Create account opens an explicit unavailable page.
+- Real PostgreSQL integration suites are conditional on `HAKAISHIELD_TEST_DATABASE_URL`; they did not run because a test database and Docker daemon are unavailable here. Go race tests could not run on this Windows host because CGO and a C compiler are absent.
+- At the initial 2026-10-05 audit, no live Supabase, payment processor, AWS, or Cloudflare credentials were configured. The dated follow-ups below record later Supabase and Upstash connections and signed-in browser verification. Payment webhook, customer certificate issuance, failover, and live protected traffic E2E remain untested.
+
+## Required release gates
+
+1. Choose the merchant's legal country and payment provider; complete the operator identity and contacts in the new Terms, Privacy Notice, Acceptable Use Policy, Cookie Notice, and DPA; obtain country-specific legal review; approve pricing, tax, refund, and support processes. Apply and stage-test `supabase/migrations/202610050001_legal_consent.sql`. Implement hosted checkout, verified idempotent webhooks, subscription state, entitlement enforcement, and failed-payment handling. A browser return URL must never grant access.
+2. Deploy exact-host multi-tenant TLS termination with raw visitor TLS to the edge. The API now probes the public origin, issues ACME TLS-ALPN certificates only for verified tenant hosts, and activates routing atomically in monitor/shadow mode. Prove DNS cutover, issuance/renewal, rollback, and SNI/Host mismatch on a real staging domain. Cloudflare Tunnel/custom-hostname termination needs a separate architecture.
+3. Add durable account-scoped usage metering separate from the bounded evidence queue. Define limit behavior that does not take a customer's site offline unexpectedly.
+4. Validate migration and rollback of the existing single-domain deployment, backups and restore, availability across at least two edge nodes, load/soak tests, latency and egress budgets, and alerts for certificate expiry, Redis/Postgres failure, evidence drops, and origin errors.
+5. Run the complete journey with the current auth policy and payment provider test mode, then a controlled live customer: signup, session, password recovery, checkout, webhook duplicates/failures, domain ownership, certificate, DNS, proxy traffic, shadow evidence, enforcement, cancellation, and recovery. Email confirmation is currently disabled by the owner.
+6. Build the dashboard with production public environment variables and deploy to Cloudflare Pages. Deploy the Go edge to AWS with raw visitor TLS reaching HakaiShield. A Cloudflare Tunnel or ordinary proxied customer traffic terminates the visitor TLS handshake at Cloudflare, so it cannot feed raw ClientHello data into the current Go proxy. Cloudflare documents a separate Worker JA4 field, but it requires Enterprise Bot Management; an adapter would be new architecture and is not implemented. Keep the dashboard on Cloudflare Pages and route protected customer traffic directly to the HakaiShield edge until that adapter is built and verified.
+
+Only after these gates pass should the public site advertise a purchasable protection service.
+
+## Follow-up: 2026-10-06
+
+- Connected the local Go API to the supplied Supabase Session pooler URI. Restored the remote core migration file into this repo, then applied the legal consent migration through Supabase CLI with aligned migration history.
+- Transactional database checks passed for accepted signup consent, rejection of missing consent, and authenticated marketing preference read/update; test rows were rolled back. No real email confirmation or signed-in browser E2E has run yet.
+- Found that anonymous PostgREST requests could read backend-owned public tables. Applied `202610060001_restrict_application_tables.sql`; repeat requests to all seven checked tables now return HTTP 401. The privileged backend role and marketing RPC still work.
+- The local backend starts and exposes the Supabase-authenticated API; unauthenticated domains requests return HTTP 401. Redis is unavailable on this machine, so this is not a production-like traffic test.
+- Upstash REST credentials passed a live read-only PING. The Go edge uses TCP Redis for request-path pipelines and replay nonces. Production Compose now requires `REDIS_URL` and omits the local Redis container; database and Redis URLs are supplied through server environment rather than process arguments.
+- Backend tests/vet, 42 dashboard tests/typecheck/build, and Compose config validation pass. Signup/email/domain activation E2E and container runtime verification are still pending.
+- The supplied `REDIS_URL` was verified on 2026-10-06. Live TCP tests passed for the request-path pipeline commands, HyperLogLog, session hashes, fingerprint feeds, and single-use challenge nonces. With Supabase and Upstash connected, local backend readiness returned 200, unauthenticated domains API returned 401, and public health returned 200. Region-specific latency/load and deployed container checks remain pending.
+- Live browser signup created an unconfirmed Supabase Auth account, and an attempted sign-in correctly returned "Email not confirmed". Confirmation delivery remains unverified; Supabase's built-in sender is restricted and a custom SMTP provider is required for a public service. Domain onboarding and owner isolation tests passed against the connected Supabase Postgres in temporary schemas that were cleaned up. DNS ownership, customer TLS issuance, and protected traffic still need a controlled hostname and deployment.
+- After ownership verification the API now returns the exact DNS A record for the configured stable public edge IPv4. The dashboard blocks activation when no valid address is configured; production Compose requires `HAKAISHIELD_EDGE_IPV4`. Configure an AWS Elastic IP before advertising the record. Signup confirmation was requested and one resend was accepted by Supabase, but the user reported no email; check Supabase Auth logs and configure verified custom SMTP before rerunning the live journey.
+- The user manually confirmed the test Auth account. A real browser sign-in then succeeded and loaded the authenticated Domains page using the live Supabase session and Go API. This proves the post-confirmation login path; manual confirmation does not prove email delivery. DNS ownership, activation, and protected traffic still need a user-controlled hostname and a deployed edge with a stable public IP.
+- On 2026-10-07, domain creation and activation gained a same-host origin guard. Without it, changing the protected hostname's DNS to the edge could make the edge proxy back to itself. The dashboard gives the same validation guidance. Activation also refuses a missing public edge IPv4 or public DNS with any address outside that edge, including leftover IPv6, before requesting a certificate.
+- The ACME-enabled TLS listener now advertises normal HTTP/2 and HTTP/1.1 ALPN alongside the ACME challenge protocol, so browser traffic can negotiate HTTP/2 after certificate issuance.
+- Customer origin connections now reject the configured edge IPv4 after dialing, so a separate origin alias that is later changed to point back at the edge cannot create a self-proxy loop.
+- The owner disabled Supabase Confirm Email on 2026-10-07. A read-only settings check returned `mailer_autoconfirm=True`. A fresh real signup returned a user and session, its JWT accessed the protected Go domains API, and a second fresh signup in the browser reached the authenticated Domains page with no browser errors. This verifies signup without email confirmation; it does not verify email ownership. Custom SMTP is still required for password recovery before a public paid launch.

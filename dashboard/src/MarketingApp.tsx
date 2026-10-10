@@ -8,6 +8,10 @@ import Contact from './pages/Contact';
 import About from './pages/About';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
+import AccountUnavailable from './pages/AccountUnavailable';
+import AcceptableUse from './pages/AcceptableUse';
+import Cookies from './pages/Cookies';
+import DataProcessing from './pages/DataProcessing';
 
 // Public Pages release while the client API is still being deployed. Keep
 // authenticated screens out of this entry rather than publishing broken data.
@@ -25,6 +29,11 @@ export default function MarketingApp() {
           <Route path="/about" element={<About />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/acceptable-use" element={<AcceptableUse />} />
+          <Route path="/cookies" element={<Cookies />} />
+          <Route path="/data-processing" element={<DataProcessing />} />
+          <Route path="/sign-up" element={<AccountUnavailable />} />
+          <Route path="/sign-in" element={<AccountUnavailable />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

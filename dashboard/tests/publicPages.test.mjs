@@ -14,18 +14,21 @@ function load(path, stubs = {}, define = {}) {
   return mod.exports;
 }
 
-const envEmail = (value) => ({ 'import.meta.env.VITE_PILOT_CONTACT_EMAIL': JSON.stringify(value) });
+const envEmail = (value) => ({
+  'import.meta.env.VITE_CONTACT_EMAIL': JSON.stringify(value),
+  'import.meta.env.VITE_PILOT_CONTACT_EMAIL': JSON.stringify(''),
+});
 const form = {
   name: 'Asha', email: 'asha@shop.example', company: 'Shop & Co', website: 'https://shop.example',
   monthlyVisitors: '500k-2m', botProblem: 'pricing-scraping', message: 'Scrapers hit /prices\nevery minute',
 };
 
-test('pilot request mailto carries every form field to the operator inbox', () => {
-  const { pilotRequestMailto } = load('../src/lib/contact.ts', {}, envEmail('ops@operator.example'));
-  const url = new URL(pilotRequestMailto('ops@operator.example', form));
+test('contact mailto carries every form field to the support inbox', () => {
+  const { contactRequestMailto } = load('../src/lib/contact.ts', {}, envEmail('ops@operator.example'));
+  const url = new URL(contactRequestMailto('ops@operator.example', form));
   assert.equal(url.protocol, 'mailto:');
   assert.equal(decodeURIComponent(url.pathname), 'ops@operator.example');
-  assert.equal(url.searchParams.get('subject'), 'HakaiShield pilot request: Shop & Co');
+  assert.equal(url.searchParams.get('subject'), 'HakaiShield inquiry: Shop & Co');
   const body = url.searchParams.get('body');
   for (const value of ['Asha', 'asha@shop.example', 'https://shop.example', '500k-2m', 'pricing-scraping', 'Scrapers hit /prices\nevery minute']) {
     assert.ok(body.includes(value), value);
@@ -33,9 +36,9 @@ test('pilot request mailto carries every form field to the operator inbox', () =
 });
 
 test('visitor input cannot add mail headers or recipients', () => {
-  const { pilotRequestMailto } = load('../src/lib/contact.ts', {}, envEmail('ops@operator.example'));
+  const { contactRequestMailto } = load('../src/lib/contact.ts', {}, envEmail('ops@operator.example'));
   const hostile = { ...form, company: 'x&cc=attacker@evil.example&bcc=a@evil.example', message: '?to=evil@evil.example' };
-  const url = new URL(pilotRequestMailto('ops@operator.example', hostile));
+  const url = new URL(contactRequestMailto('ops@operator.example', hostile));
   assert.deepEqual([...url.searchParams.keys()], ['subject', 'body']);
   assert.equal(decodeURIComponent(url.pathname), 'ops@operator.example');
 });
